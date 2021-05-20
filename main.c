@@ -1,7 +1,6 @@
 // TODO
 // https://www.parallelrealities.co.uk/tutorials/#shooter
-// handle resize
-// go fucking ballistic
+// https://lazyfoo.net/tutorials/SDL/32_text_input_and_clipboard_handling/index.php
 // for viewport, have a -inf -> inf range of nodes located in space, then have a way to map that onto the 0, 1 viewport depending on how far you want to see. entire graph will be laid out in space, and you just take the max and min coords of the farthest nodes you want to see and map that to the screen
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_events.h>
