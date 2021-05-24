@@ -14,6 +14,9 @@
 #define SCREEN_WIDTH   1280
 #define SCREEN_HEIGHT  720
 
+#define RADIUS 100
+#define THICKNESS 10
+
 #define DEBUG 1
 
 
@@ -38,14 +41,14 @@ struct App {
 
 struct Array {
   Node **array;
-  size_t used;
-  size_t size;
+  size_t num;  /* number of children in array */
+  size_t size; /* max size of array */
 };
 
 struct Node {
 	struct Node* p;
 	struct Array* children;
-	int num_children;
+	struct Point pos;
 };
 
 struct Graph {
@@ -63,10 +66,13 @@ void doKeyDown(SDL_KeyboardEvent *event);
 void doKeyUp(SDL_KeyboardEvent *event);
 void eventHandler(SDL_Event *event);
 void set_pixel(SDL_Renderer *rend, int x, int y, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
-void draw_circle(SDL_Renderer *surface, int n_cx, int n_cy, int radius, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
-void draw_ring(SDL_Renderer *surface, int n_cx, int n_cy, int radius, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
+void drawCircle(SDL_Renderer *surface, int n_cx, int n_cy, int radius, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
+void drawRing(SDL_Renderer *surface, int n_cx, int n_cy, int radius, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
 void presentScene();
 void prepareScene();
+Node* makeNode();
+Node* makeChild(Node* parent);
+void drawNode(Node* node);
 
 void initSDL() {
 	int rendererFlags, windowFlags;
@@ -115,6 +121,9 @@ void doKeyDown(SDL_KeyboardEvent *event) {
 
 void doKeyUp(SDL_KeyboardEvent *event) {
 	if (event->repeat == 0) {
+		if (event->keysym.scancode == SDL_SCANCODE_O) {
+			makeChild(graph.selected);
+		}
 	}
 }
 
@@ -155,7 +164,7 @@ void set_pixel(SDL_Renderer *rend, int x, int y, Uint8 r, Uint8 g, Uint8 b, Uint
 	SDL_RenderDrawPoint(rend, x, y);
 }
 
-void draw_circle(SDL_Renderer *surface, int n_cx, int n_cy, int radius, Uint8 r, Uint8 g, Uint8 b, Uint8 a) {
+void drawCircle(SDL_Renderer *surface, int n_cx, int n_cy, int radius, Uint8 r, Uint8 g, Uint8 b, Uint8 a) {
 	// if the first pixel in the screen is represented by (0,0) (which is in sdl)
 	// remember that the beginning of the circle is not in the middle of the pixel
 	// but to the left-top from it:
@@ -198,12 +207,25 @@ void draw_circle(SDL_Renderer *surface, int n_cx, int n_cy, int radius, Uint8 r,
 }
 
 
-void draw_ring(SDL_Renderer *surface, int n_cx, int n_cy, int radius, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a){
+void drawRing(SDL_Renderer *surface, int n_cx, int n_cy, int radius, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a){
 	if ( thickness > radius ) {
 		printf("Trying to draw a circle of radius %d but thickness %d is too big\n", radius, thickness);
 	}
 	for (int i=0; i< thickness; i++) {
-		draw_circle(surface, n_cx, n_cy, radius - i, r, g, b, a);
+		drawCircle(surface, n_cx, n_cy, radius - i, r, g, b, a);
+	}
+}
+
+void drawNode(Node* node){
+	int x = (int) (node->pos.x + app.window_size.x / 2);
+	int y = (int) (node->pos.y + app.window_size.y / 2);
+	printf("node %p\n", node);
+	printf("children %p\n", node->children);
+	printf("num children %lu\n", node->children->num);
+	drawRing(app.renderer, x, y, RADIUS, THICKNESS, 0xFF, 0x00, 0x00, 0x00);
+	for (int i=0; i<node->children->num; i++){
+		printf("child %d / %lu: %p\n", i, node->children->num, node->children->array[i]);
+		drawNode(node->children->array[i]);
 	}
 }
 
@@ -212,15 +234,10 @@ void prepareScene() {
 	SDL_SetRenderDrawColor(app.renderer, 0, 0, 0, 255);
 	SDL_RenderClear(app.renderer);
 
-    SDL_Rect rect;
-    rect.x = 250;
-    rect.y = 150;
-    rect.w = 200;
-    rect.h = 200;
-
-    SDL_SetRenderDrawColor(app.renderer, 255, 255, 255, 255);
+    /* SDL_SetRenderDrawColor(app.renderer, 255, 255, 255, 255); */
 	/* loc x, loc y, radius, thickness, r g b a */
-	draw_ring(app.renderer, app.window_size.x / 2, app.window_size.y / 2, 50, 8, 0xFF, 0x00, 0x00, 0x00);
+	/* drawRing(app.renderer, app.window_size.x / 2, app.window_size.y / 2, 50, 8, 0xFF, 0x00, 0x00, 0x00); */
+	drawNode(graph.root);
     /* SDL_RenderDrawRect(app.renderer, &rect); */
 }
 
@@ -228,40 +245,49 @@ void presentScene() {
 	SDL_RenderPresent(app.renderer);
 }
 
-void initArray(Array *a, size_t initialSize) {
-  a->array = malloc(initialSize * sizeof(Node*));
-  a->used = 0;
-  a->size = initialSize;
+Array* initArray(size_t initialSize) {
+	Array *a;
+	a = malloc(sizeof(Array));
+  	a->array = malloc(initialSize * sizeof(Node*));
+  	a->num = 0;
+  	a->size = initialSize;
+	return a;
 }
 
 void insertArray(Array *a, Node* element) {
-  // a->used is the number of used entries, because a->array[a->used++] updates a->used only *after* the array has been accessed.
-  // Therefore a->used can go up to a->size
-  if (a->used == a->size) {
+  // a->num is the number of used entries, because a->array[a->num++] updates a->num only *after* the array has been accessed.
+  // Therefore a->num can go up to a->size
+  if (a->num == a->size) {
     a->size *= 2;
     a->array = realloc(a->array, a->size * sizeof(Node*));
   }
-  a->array[a->used++] = element;
+  printf("insertArray %lu/%lu\n", a->num, a->size);
+  a->array[a->num++] = element;
 }
 
 void freeArray(Array *a) {
   free(a->array);
   a->array = NULL;
-  a->used = a->size = 0;
+  a->num = a->size = 0;
+  free(a);
+}
+
+/* creates a new node at the origin */
+Node* makeNode(){
+	Node* node = malloc(sizeof(Node));
+	node->children = initArray(5);
+	node->children->num = 0;
+	node->pos.x = 0;
+	node->pos.y = 0;
+	return node;
 }
 
 Node* makeChild(Node* parent){
-
-	Node* child = malloc(sizeof(Node));
+	Node* child = makeNode();
 	child->p = parent;
-
-	Array *grandchildren;
-	initArray(grandchildren, 5);
-	child->children = grandchildren;
-	child->num_children = 0;
-
 	insertArray(parent->children, child);
-	parent->num_children += 1;
+	child->pos.x = parent->pos.x;
+	child->pos.y = parent->pos.y + 100;
 
 	return child;
 }
@@ -272,25 +298,39 @@ void deleteNode(Node* node){
 		return;
 	}
 	/* If leaf node, delete and return */
-	if ( node->num_children <= 0 ){
+	if ( node->children->num <= 0 ){
 		free(node);
 		return;
 	}
     /* Else, delete each child */
-	for (int i=0; i<node->children->size; i++){
+	for (int i=0; i<node->children->num; i++){
 		deleteNode( node->children->array[i] );
 	}
 	/* Then delete node */
 	free(node);
+	freeArray(node->children);
 }
+
+void makeGraph(){
+	graph.root = makeNode();
+	graph.num_nodes = 0;
+	graph.selected = graph.root;
+	graph.mode = Default;
+}
+
 
 
 int main(int argc, char *argv[]) {
 
+	/* intitialize app memory */
 	memset(&app, 0, sizeof(App));
 
+	/* set up window, screen, and renderer */
 	initSDL();
 
+	makeGraph();
+
+	/* gracefully close windows on exit of program */
 	atexit(SDL_Quit);
 
 	bool quit = 0;
@@ -298,18 +338,26 @@ int main(int argc, char *argv[]) {
 	SDL_Event e;
 	/* Only updates display and processes inputs on new events */
 	while ( !app.quit && SDL_WaitEvent(&e) ) {
-		prepareScene();
 
 		/* Handle Resize */
 		switch (e.type){
 		}
 
+		/* Handle input before rendering */
 		eventHandler(&e);
+
+		prepareScene();
 
 		presentScene();
 
-		SDL_Delay(16);
+		SDL_Delay(0);
 	}
+
+	/* delete nodes recursively, starting from root */
+	printf("deleting\n");
+	deleteNode(graph.root);
+	printf("deleted\n");
+
 
 	return 0;
 }
