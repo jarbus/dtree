@@ -14,10 +14,15 @@
 #define SCREEN_WIDTH   1280
 #define SCREEN_HEIGHT  720
 
-#define RADIUS 100
+// radius and thickness of node ring
+#define RADIUS 50
 #define THICKNESS 10
 
-#define DEBUG 1
+// Spacing between layers of tree
+#define LAYER_MARGIN 0.3
+#define BRANCH_MARGIN 100
+
+#define DEBUG 0
 
 
 enum Mode{Default, Edit, Travel};
@@ -30,6 +35,10 @@ typedef struct App App;
 struct Point {
 	int x;
 	int y;
+};
+struct DoublePoint {
+	double x;
+	double y;
 };
 
 struct App {
@@ -48,7 +57,7 @@ struct Array {
 struct Node {
 	struct Node* p;
 	struct Array* children;
-	struct Point pos;
+	struct DoublePoint pos;
 };
 
 struct Graph {
@@ -73,6 +82,8 @@ void prepareScene();
 Node* makeNode();
 Node* makeChild(Node* parent);
 void drawNode(Node* node);
+void update_pos_children(Node* node, double leftmost_bound, double rightmost_bound, double level);
+void recursively_print_positions(Node* node, int level);
 
 void initSDL() {
 	int rendererFlags, windowFlags;
@@ -123,6 +134,19 @@ void doKeyUp(SDL_KeyboardEvent *event) {
 	if (event->repeat == 0) {
 		if (event->keysym.scancode == SDL_SCANCODE_O) {
 			makeChild(graph.selected);
+		}
+		if (event->keysym.scancode == SDL_SCANCODE_H) {
+			if ( graph.selected->children->num >= 1 ){
+				graph.selected = graph.selected->children->array[0];
+			}
+		}
+		if (event->keysym.scancode == SDL_SCANCODE_L) {
+			if ( graph.selected->children->num >= 1 ){
+				graph.selected = graph.selected->children->array[graph.selected->children->num-1];
+			}
+		}
+		if (event->keysym.scancode == SDL_SCANCODE_K) {
+			graph.selected = graph.selected->p;
 		}
 	}
 }
@@ -216,29 +240,110 @@ void drawRing(SDL_Renderer *surface, int n_cx, int n_cy, int radius, int thickne
 	}
 }
 
-void drawNode(Node* node){
-	int x = (int) (node->pos.x + app.window_size.x / 2);
-	int y = (int) (node->pos.y + app.window_size.y / 2);
-	printf("node %p\n", node);
-	printf("children %p\n", node->children);
-	printf("num children %lu\n", node->children->num);
-	drawRing(app.renderer, x, y, RADIUS, THICKNESS, 0xFF, 0x00, 0x00, 0x00);
+void drawNode(Node* node) {
+
+
+	int x = (int) ((node->pos.x) * app.window_size.x);
+	int y = (int) ((node->pos.y) * app.window_size.y);
+	if ( DEBUG ){
+		printf("%d %d from %f %f for node %p\n", x, y, node->pos.x, node->pos.y, node);
+		printf("node %p\n", node);
+		printf("children %p\n", node->children);
+		printf("num children %lu\n", node->children->num);
+	}
+	/* draw red ring for unselected nodes, green for selected */
+	if (node != graph.selected)
+		drawRing(app.renderer, x, y, RADIUS, THICKNESS, 0xFF, 0x00, 0x00, 0x00);
+	else
+		drawRing(app.renderer, x, y, RADIUS, THICKNESS, 0x00, 0xFF, 0x00, 0x00);
+
+	/* draw edges between parent and child nodes */
+	if (node != graph.root){
+		int px = (int) ((node->p->pos.x) * app.window_size.x);
+		int py = (int) ((node->p->pos.y) * app.window_size.y);
+		SDL_RenderDrawLine(app.renderer, x, y, px, py);
+	}
+
+
 	for (int i=0; i<node->children->num; i++){
-		printf("child %d / %lu: %p\n", i, node->children->num, node->children->array[i]);
+		if ( DEBUG )
+			printf("child %d / %lu: %p\n", i, node->children->num, node->children->array[i]);
 		drawNode(node->children->array[i]);
 	}
 }
 
 
+void update_pos_children(Node* node, double leftmost_bound, double rightmost_bound, double level){
+
+	/* update current node position */
+	node->pos.x = (rightmost_bound + leftmost_bound) / 2;
+	node->pos.y = level;
+
+	if ( DEBUG )
+		printf("update node position to %lf %lf\n", node->pos.x, node->pos.y);
+
+	/* dont update children if no children */
+	if ( node->children->num == 0)
+		return;
+
+	/* split space for parent node up among children and update positions */
+	double step = (rightmost_bound - leftmost_bound) / node->children->num;
+	double iter = leftmost_bound;
+
+	/* printf("beginning loop\n"); */
+	for (int i = 0; i < node->children->num; i += 1){
+		if ( DEBUG ){
+			printf("loop %d / %ld with step %lf\n", i, node->children->num, step);
+			printf("%d %p\n", i, node->children->array[i]);
+			printf("%p->%p [%lf %lf]\n", node, node->children->array[i], iter, iter+step);
+		}
+		update_pos_children(node->children->array[i], iter, iter + step, level + LAYER_MARGIN);
+		iter += step;
+	}
+}
+
+
+
+void compute_root_bounds_from_selected_and_update_pos_children(Node* node, double leftmost_bound, double rightmost_bound, double level){
+	if (node == graph.root){
+		update_pos_children(node, leftmost_bound, rightmost_bound, level);
+		return;
+	}
+	double step_size = rightmost_bound - leftmost_bound;
+	int child_idx;
+	/* compute idx of child relative to parent */
+	for (int i = 0; i < node->p->children->num; i++) {
+		if (node->p->children->array[i] == node){
+			child_idx = i;
+			break;
+		}
+	}
+	double parent_left_bound = leftmost_bound - (step_size * child_idx);
+	double parent_right_bound = rightmost_bound + (step_size * (node->p->children->num - child_idx-1));
+	compute_root_bounds_from_selected_and_update_pos_children(node->p, parent_left_bound, parent_right_bound, level - LAYER_MARGIN);
+}
+
+
+void recursively_print_positions(Node* node, int level){
+	for (int i=0; i<level; i++){
+		printf("\t");
+	}
+	printf("%lf %lf\n",node->pos.x, node->pos.y);
+
+	for (int i = 0; i < node->children->num; i++) {
+		recursively_print_positions(node->children->array[i], level + 1);
+	}
+}
+
+
+
 void prepareScene() {
 	SDL_SetRenderDrawColor(app.renderer, 0, 0, 0, 255);
 	SDL_RenderClear(app.renderer);
-
-    /* SDL_SetRenderDrawColor(app.renderer, 255, 255, 255, 255); */
-	/* loc x, loc y, radius, thickness, r g b a */
-	/* drawRing(app.renderer, app.window_size.x / 2, app.window_size.y / 2, 50, 8, 0xFF, 0x00, 0x00, 0x00); */
+	compute_root_bounds_from_selected_and_update_pos_children(graph.selected, 0.4, 0.6, 0.5);
+	if ( DEBUG )
+		recursively_print_positions(graph.root, 0);
 	drawNode(graph.root);
-    /* SDL_RenderDrawRect(app.renderer, &rect); */
 }
 
 void presentScene() {
@@ -247,29 +352,28 @@ void presentScene() {
 
 Array* initArray(size_t initialSize) {
 	Array *a;
-	a = malloc(sizeof(Array));
-  	a->array = malloc(initialSize * sizeof(Node*));
+	a = calloc(1, sizeof(Array));
+  	a->array = calloc(initialSize, sizeof(Node*));
   	a->num = 0;
   	a->size = initialSize;
 	return a;
 }
 
 void insertArray(Array *a, Node* element) {
-  // a->num is the number of used entries, because a->array[a->num++] updates a->num only *after* the array has been accessed.
-  // Therefore a->num can go up to a->size
-  if (a->num == a->size) {
-    a->size *= 2;
-    a->array = realloc(a->array, a->size * sizeof(Node*));
-  }
-  printf("insertArray %lu/%lu\n", a->num, a->size);
-  a->array[a->num++] = element;
+	// a->num is the number of used entries, because a->array[a->num++] updates a->num only *after* the array has been accessed.
+	// Therefore a->num can go up to a->size
+	if (a->num == a->size) {
+		a->size *= 2;
+		a->array = realloc(a->array, a->size * sizeof(Node*));
+	}
+	a->array[a->num++] = element;
 }
 
 void freeArray(Array *a) {
-  free(a->array);
-  a->array = NULL;
-  a->num = a->size = 0;
-  free(a);
+	free(a->array);
+	a->array = NULL;
+	a->num = a->size = 0;
+	free(a);
 }
 
 /* creates a new node at the origin */
@@ -286,8 +390,6 @@ Node* makeChild(Node* parent){
 	Node* child = makeNode();
 	child->p = parent;
 	insertArray(parent->children, child);
-	child->pos.x = parent->pos.x;
-	child->pos.y = parent->pos.y + 100;
 
 	return child;
 }
@@ -317,7 +419,6 @@ void makeGraph(){
 	graph.selected = graph.root;
 	graph.mode = Default;
 }
-
 
 
 int main(int argc, char *argv[]) {
@@ -354,9 +455,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* delete nodes recursively, starting from root */
-	printf("deleting\n");
 	deleteNode(graph.root);
-	printf("deleted\n");
 
 
 	return 0;
