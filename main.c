@@ -1,28 +1,33 @@
 // TODO
 // https://www.parallelrealities.co.uk/tutorials/#shooter
 // https://lazyfoo.net/tutorials/SDL/32_text_input_and_clipboard_handling/index.php
-// for viewport, have a -inf -> inf range of nodes located in space, then have a way to map that onto the 0, 1 viewport depending on how far you want to see. entire graph will be laid out in space, and you just take the max and min coords of the farthest nodes you want to see and map that to the screen
-// use pointers as references for objects?
 // marks: `s for structs
 // 		  `f for functions
 // 		  `m for main function
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_events.h>
+#include <SDL2/SDL_scancode.h>
 #include <stdio.h>
 #include <stdbool.h>
+
+#define DEBUG 0
 
 #define SCREEN_WIDTH   1280
 #define SCREEN_HEIGHT  720
 
 // radius and thickness of node ring
-#define RADIUS 50
-#define THICKNESS 10
+static int RADIUS = 50;
+static int THICKNESS = 10;
+
+static double LEFT_BOUNDARY = 0.3;
+static double RIGHT_BOUNDARY = 0.7;
 
 // Spacing between layers of tree
-#define LAYER_MARGIN 0.3
-#define BRANCH_MARGIN 100
+static double LAYER_MARGIN = 0.3;
+static double SIDE_MARGIN = 0.3;
 
-#define DEBUG 0
+static double SCALE = 1.5;
+
 
 
 enum Mode{Default, Edit, Travel};
@@ -70,6 +75,7 @@ struct Graph {
 static App app;
 static Graph graph;
 
+double clip(double num, double min, double max);
 void initSDL();
 void doKeyDown(SDL_KeyboardEvent *event);
 void doKeyUp(SDL_KeyboardEvent *event);
@@ -82,8 +88,17 @@ void prepareScene();
 Node* makeNode();
 Node* makeChild(Node* parent);
 void drawNode(Node* node);
+void compute_root_bounds_from_selected_and_update_pos_children(Node* node, double leftmost_bound, double rightmost_bound, double level);
 void update_pos_children(Node* node, double leftmost_bound, double rightmost_bound, double level);
 void recursively_print_positions(Node* node, int level);
+
+double clip(double num, double min, double max){
+	if ( num < min )
+		return min;
+	if ( num > max )
+		return max;
+	return num;
+}
 
 void initSDL() {
 	int rendererFlags, windowFlags;
@@ -122,8 +137,6 @@ void initSDL() {
 
 void doKeyDown(SDL_KeyboardEvent *event) {
 	if (event->repeat == 0) {
-		/* if (event->keysym.scancode == SDL_SCANCODE_Q) { */
-		/* } */
 		if (event->keysym.scancode == SDL_SCANCODE_Q) {
 			app.quit = 1;
 		}
@@ -147,6 +160,20 @@ void doKeyUp(SDL_KeyboardEvent *event) {
 		}
 		if (event->keysym.scancode == SDL_SCANCODE_K) {
 			graph.selected = graph.selected->p;
+		}
+		if (event->keysym.scancode == SDL_SCANCODE_MINUS){
+			LAYER_MARGIN /= SCALE;
+			RADIUS = (int) RADIUS / SCALE;
+			THICKNESS = (int) THICKNESS / SCALE;
+			LEFT_BOUNDARY -= SIDE_MARGIN * SCALE;
+			RIGHT_BOUNDARY -= SCALE;
+		}
+		if (event->keysym.scancode == SDL_SCANCODE_EQUALS){
+			LAYER_MARGIN *= SCALE;
+			RADIUS = (int) RADIUS * SCALE;
+			THICKNESS = (int) THICKNESS * SCALE;
+			LEFT_BOUNDARY += SCALE;
+			RIGHT_BOUNDARY += SCALE;
 		}
 	}
 }
@@ -242,6 +269,8 @@ void drawRing(SDL_Renderer *surface, int n_cx, int n_cy, int radius, int thickne
 
 void drawNode(Node* node) {
 
+	if ( node == NULL )
+		return;
 
 	int x = (int) ((node->pos.x) * app.window_size.x);
 	int y = (int) ((node->pos.y) * app.window_size.y);
@@ -263,7 +292,6 @@ void drawNode(Node* node) {
 		int py = (int) ((node->p->pos.y) * app.window_size.y);
 		SDL_RenderDrawLine(app.renderer, x, y, px, py);
 	}
-
 
 	for (int i=0; i<node->children->num; i++){
 		if ( DEBUG )
@@ -305,12 +333,15 @@ void update_pos_children(Node* node, double leftmost_bound, double rightmost_bou
 
 
 void compute_root_bounds_from_selected_and_update_pos_children(Node* node, double leftmost_bound, double rightmost_bound, double level){
+
 	if (node == graph.root){
 		update_pos_children(node, leftmost_bound, rightmost_bound, level);
 		return;
 	}
+
 	double step_size = rightmost_bound - leftmost_bound;
 	int child_idx;
+
 	/* compute idx of child relative to parent */
 	for (int i = 0; i < node->p->children->num; i++) {
 		if (node->p->children->array[i] == node){
@@ -340,9 +371,19 @@ void recursively_print_positions(Node* node, int level){
 void prepareScene() {
 	SDL_SetRenderDrawColor(app.renderer, 0, 0, 0, 255);
 	SDL_RenderClear(app.renderer);
-	compute_root_bounds_from_selected_and_update_pos_children(graph.selected, 0.4, 0.6, 0.5);
+
+	/* fill up more space if at the root node, just a visual improvement */
+	if ( graph.root == graph.selected )
+		compute_root_bounds_from_selected_and_update_pos_children(graph.selected, 0.1, 0.9, 0.5);
+	else
+		compute_root_bounds_from_selected_and_update_pos_children(
+			graph.selected,
+				clip(SIDE_MARGIN * SCALE, 0.0, 1.0),
+				clip(1.0 - (SIDE_MARGIN * SCALE), 0.0, 1.0),
+				0.5);
 	if ( DEBUG )
 		recursively_print_positions(graph.root, 0);
+
 	drawNode(graph.root);
 }
 
@@ -399,18 +440,13 @@ void deleteNode(Node* node){
 	if ( node == NULL ) {
 		return;
 	}
-	/* If leaf node, delete and return */
-	if ( node->children->num <= 0 ){
-		free(node);
-		return;
-	}
-    /* Else, delete each child */
+    /* delete each child */
 	for (int i=0; i<node->children->num; i++){
 		deleteNode( node->children->array[i] );
 	}
 	/* Then delete node */
-	free(node);
 	freeArray(node->children);
+	free(node);
 }
 
 void makeGraph(){
@@ -420,10 +456,9 @@ void makeGraph(){
 	graph.mode = Default;
 }
 
-
 int main(int argc, char *argv[]) {
 
-	/* intitialize app memory */
+	/* set all bytes of App memory to zero */
 	memset(&app, 0, sizeof(App));
 
 	/* set up window, screen, and renderer */
@@ -457,6 +492,14 @@ int main(int argc, char *argv[]) {
 	/* delete nodes recursively, starting from root */
 	deleteNode(graph.root);
 
+
+	SDL_DestroyRenderer( app.renderer );
+	SDL_DestroyWindow( app.window );
+
+    //Quit SDL subsystems
+    SDL_Quit();
+
+	printf("shutting down\n");
 
 	return 0;
 }
