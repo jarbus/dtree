@@ -315,10 +315,10 @@ void renderMessage(char* message){
 
 	//this opens a font style and sets a size
 	TTF_Font* Sans = TTF_OpenFont("/home/jack/drive/cs2/dtree/assets/FiraSans-Regular.ttf", 12);
- 	if(!Sans) {
-		printf("TTF_OpenFont: %s\n", TTF_GetError());
+ 	/* if(Sans == NULL) { */
+	printf("TTF_OpenFont: %s\n", TTF_GetError());
 		// handle error
-	}
+	/* } */
 	printf("sans pointer %p\n", Sans);
 	// this is the color in rgb format,
 	// maxing out all would give you the color white,

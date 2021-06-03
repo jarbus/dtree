@@ -1,5 +1,6 @@
-dtree: main.o
-	gcc main.o -o dtree -lSDL2 -g -fno-inline -fno-omit-frame-pointer
+CFLAGS=-g -O2 -Wall $(shell sdl2-config --cflags)
+LDFLAGS=-g -O2 -Wall $(shell sdl2-config --libs) -lSDL2_ttf
 
-main.o: main.c
-	gcc -g -fno-inline -fno-omit-frame-pointer main.c -c
+PROGRAMS=$(basename $(wildcard *.c))
+
+all: $(PROGRAMS)
