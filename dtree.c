@@ -5,8 +5,8 @@
 // marks: `s for structs
 // 		  `f for functions
 // 		  `m for main function
-#include "SDL.h"
-#include "SDL_ttf.h"
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_ttf.h>
 #include "SDL_events.h"
 #include "SDL_scancode.h"
 #include <stdio.h>
@@ -141,7 +141,7 @@ void initSDL() {
 	if(TTF_Init()==-1)
 	{
 		printf("TTF_Init: %s\n", TTF_GetError());
-		return 2;
+		return;
 	}
 	atexit(TTF_Quit); /* remember to quit SDL_ttf */
 }
@@ -314,24 +314,23 @@ void drawNode(Node* node) {
 void renderMessage(char* message){
 
 	//this opens a font style and sets a size
-	TTF_Font* Sans = TTF_OpenFont("/home/jack/drive/cs2/dtree/assets/FiraSans-Regular.ttf", 12);
- 	/* if(Sans == NULL) { */
-	printf("TTF_OpenFont: %s\n", TTF_GetError());
+	TTF_Font* Sans = TTF_OpenFont("/home/jack/drive/cs2/dtree/assets/FiraSans-Regular.ttf", 20);
+ 	if(Sans == NULL) {
+		printf("TTF_OpenFont: %s\n", TTF_GetError());
 		// handle error
-	/* } */
-	printf("sans pointer %p\n", Sans);
+	}
 	// this is the color in rgb format,
 	// maxing out all would give you the color white,
 	// and it will be your text's color
 	SDL_Color White = {255, 255, 255};
 
-	printf("rendering %s\n", message);
+	if ( DEBUG )
+		printf("rendering %s\n", message);
 	// as TTF_RenderText_Solid could only be used on
 	// SDL_Surface then you have to create the surface first
 	SDL_Surface* surfaceMessage =
-		TTF_RenderText_Solid(Sans, "text this is a very very very long rangfgfggfhgs", White);
+		TTF_RenderText_Blended_Wrapped(Sans, "hi there", White, 30);
 
-	printf("surfaceMessage pointer %p\n", surfaceMessage);
 	// now you can convert it into a texture
 	SDL_Texture* Message = SDL_CreateTextureFromSurface(app.renderer, surfaceMessage);
 
@@ -401,7 +400,7 @@ void compute_root_bounds_from_selected_and_update_pos_children(Node* node, doubl
 	}
 
 	double step_size = rightmost_bound - leftmost_bound;
-	int child_idx;
+	int child_idx = 0;
 
 	/* compute idx of child relative to parent */
 	for (int i = 0; i < node->p->children->num; i++) {
@@ -531,7 +530,7 @@ int main(int argc, char *argv[]) {
 	/* gracefully close windows on exit of program */
 	atexit(SDL_Quit);
 
-	bool quit = 0;
+	app.quit = 0;
 
 	SDL_Event e;
 	/* Only updates display and processes inputs on new events */
@@ -546,7 +545,6 @@ int main(int argc, char *argv[]) {
 
 		prepareScene();
 		char* message = "HELLO";
-		printf("renderMessage()\n");
 		renderMessage(message);
 
 		presentScene();
