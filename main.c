@@ -1,12 +1,14 @@
 // TODO
+// figure out how to wrap messages
 // https://www.parallelrealities.co.uk/tutorials/#shooter
 // https://lazyfoo.net/tutorials/SDL/32_text_input_and_clipboard_handling/index.php
 // marks: `s for structs
 // 		  `f for functions
 // 		  `m for main function
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_events.h>
-#include <SDL2/SDL_scancode.h>
+#include "SDL.h"
+#include "SDL_ttf.h"
+#include "SDL_events.h"
+#include "SDL_scancode.h"
 #include <stdio.h>
 #include <stdbool.h>
 
@@ -83,6 +85,7 @@ void eventHandler(SDL_Event *event);
 void set_pixel(SDL_Renderer *rend, int x, int y, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
 void drawCircle(SDL_Renderer *surface, int n_cx, int n_cy, int radius, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
 void drawRing(SDL_Renderer *surface, int n_cx, int n_cy, int radius, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
+void renderMessage(char* message);
 void presentScene();
 void prepareScene();
 Node* makeNode();
@@ -133,6 +136,14 @@ void initSDL() {
 	SDL_GetWindowSize(app.window, &w, &h);
 	app.window_size.x = w;
 	app.window_size.y = h;
+
+	/* start SDL_ttf */
+	if(TTF_Init()==-1)
+	{
+		printf("TTF_Init: %s\n", TTF_GetError());
+		return 2;
+	}
+	atexit(TTF_Quit); /* remember to quit SDL_ttf */
 }
 
 void doKeyDown(SDL_KeyboardEvent *event) {
@@ -300,6 +311,56 @@ void drawNode(Node* node) {
 	}
 }
 
+void renderMessage(char* message){
+
+	//this opens a font style and sets a size
+	TTF_Font* Sans = TTF_OpenFont("/home/jack/drive/cs2/dtree/assets/FiraSans-Regular.ttf", 12);
+ 	if(!Sans) {
+		printf("TTF_OpenFont: %s\n", TTF_GetError());
+		// handle error
+	}
+	printf("sans pointer %p\n", Sans);
+	// this is the color in rgb format,
+	// maxing out all would give you the color white,
+	// and it will be your text's color
+	SDL_Color White = {255, 255, 255};
+
+	printf("rendering %s\n", message);
+	// as TTF_RenderText_Solid could only be used on
+	// SDL_Surface then you have to create the surface first
+	SDL_Surface* surfaceMessage =
+		TTF_RenderText_Solid(Sans, "text this is a very very very long rangfgfggfhgs", White);
+
+	printf("surfaceMessage pointer %p\n", surfaceMessage);
+	// now you can convert it into a texture
+	SDL_Texture* Message = SDL_CreateTextureFromSurface(app.renderer, surfaceMessage);
+
+	SDL_Rect Message_rect; //create a rect
+	Message_rect.x = 400;  //controls the rect's x coordinate
+	Message_rect.y = 400; // controls the rect's y coordinte
+	Message_rect.w = 100; // controls the width of the rect
+	Message_rect.h = 100; // controls the height of the rect
+
+
+	// (0,0) is on the top left of the window/screen,
+	// think a rect as the text's box,
+	// that way it would be very simple to understand
+
+	// Now since it's a texture, you have to put RenderCopy
+	// in your game loop area, the area where the whole code executes
+
+	// you put the renderer's name first, the Message,
+	// the crop size (you can ignore this if you don't want
+	// to dabble with cropping), and the rect which is the size
+	// and coordinate of your texture
+	SDL_RenderCopy(app.renderer, Message, NULL, &Message_rect);
+
+	// Don't forget to free your surface and texture
+	SDL_FreeSurface(surfaceMessage);
+	SDL_DestroyTexture(Message);
+
+}
+
 
 void update_pos_children(Node* node, double leftmost_bound, double rightmost_bound, double level){
 
@@ -365,6 +426,7 @@ void recursively_print_positions(Node* node, int level){
 		recursively_print_positions(node->children->array[i], level + 1);
 	}
 }
+
 
 
 
@@ -483,6 +545,9 @@ int main(int argc, char *argv[]) {
 		eventHandler(&e);
 
 		prepareScene();
+		char* message = "HELLO";
+		printf("renderMessage()\n");
+		renderMessage(message);
 
 		presentScene();
 
