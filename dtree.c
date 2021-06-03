@@ -21,8 +21,8 @@
 static int RADIUS = 50;
 static int THICKNESS = 10;
 
-static double LEFT_BOUNDARY = 0.3;
-static double RIGHT_BOUNDARY = 0.7;
+static double LEFT_BOUNDARY = 0.2;
+static double RIGHT_BOUNDARY = 0.8;
 
 // Spacing between layers of tree
 static double LAYER_MARGIN = 0.3;
@@ -55,6 +55,7 @@ struct App {
 	Point window_size;
 };
 
+/* dynamic array to save me some headache, code is stolen from stack overflow */
 struct Array {
   Node **array;
   size_t num;  /* number of children in array */
@@ -221,11 +222,14 @@ void eventHandler(SDL_Event *event) {
 	}
 }
 
+/* Sets value of a single pixel on the screen */
 void set_pixel(SDL_Renderer *rend, int x, int y, Uint8 r, Uint8 g, Uint8 b, Uint8 a) {
 	SDL_SetRenderDrawColor(rend, r,g,b,a);
 	SDL_RenderDrawPoint(rend, x, y);
 }
 
+/* I stole this code, it works, do not touch
+   n_cx and n_cy are the centers of the circle*/
 void drawCircle(SDL_Renderer *surface, int n_cx, int n_cy, int radius, Uint8 r, Uint8 g, Uint8 b, Uint8 a) {
 	// if the first pixel in the screen is represented by (0,0) (which is in sdl)
 	// remember that the beginning of the circle is not in the middle of the pixel
@@ -278,6 +282,7 @@ void drawRing(SDL_Renderer *surface, int n_cx, int n_cy, int radius, int thickne
 	}
 }
 
+/* Renders each node, then renders it's children and draws lines to the children */
 void drawNode(Node* node) {
 
 	if ( node == NULL )
@@ -311,6 +316,7 @@ void drawNode(Node* node) {
 	}
 }
 
+// testing SDL_TTF font rendering
 void renderMessage(char* message){
 
 	//this opens a font style and sets a size
@@ -361,6 +367,7 @@ void renderMessage(char* message){
 }
 
 
+/* Given the bounds for a parent node, updates the positions of all children nodes */
 void update_pos_children(Node* node, double leftmost_bound, double rightmost_bound, double level){
 
 	/* update current node position */
@@ -378,7 +385,6 @@ void update_pos_children(Node* node, double leftmost_bound, double rightmost_bou
 	double step = (rightmost_bound - leftmost_bound) / node->children->num;
 	double iter = leftmost_bound;
 
-	/* printf("beginning loop\n"); */
 	for (int i = 0; i < node->children->num; i += 1){
 		if ( DEBUG ){
 			printf("loop %d / %ld with step %lf\n", i, node->children->num, step);
@@ -394,11 +400,14 @@ void update_pos_children(Node* node, double leftmost_bound, double rightmost_bou
 
 void compute_root_bounds_from_selected_and_update_pos_children(Node* node, double leftmost_bound, double rightmost_bound, double level){
 
+	/* If we reached the root, compute all child bounds relative to the root bounds */
 	if (node == graph.root){
 		update_pos_children(node, leftmost_bound, rightmost_bound, level);
 		return;
 	}
 
+	/* we step through each sibling of the current node,
+	giving each child the same size as the current node */
 	double step_size = rightmost_bound - leftmost_bound;
 	int child_idx = 0;
 
@@ -409,12 +418,14 @@ void compute_root_bounds_from_selected_and_update_pos_children(Node* node, doubl
 			break;
 		}
 	}
+	/* compute the left and right boundaries of the parent node relative
+	to the location of the child */
 	double parent_left_bound = leftmost_bound - (step_size * child_idx);
 	double parent_right_bound = rightmost_bound + (step_size * (node->p->children->num - child_idx-1));
 	compute_root_bounds_from_selected_and_update_pos_children(node->p, parent_left_bound, parent_right_bound, level - LAYER_MARGIN);
 }
 
-
+/* Debug function, used to print locations of all nodes in indented hierarchy */
 void recursively_print_positions(Node* node, int level){
 	for (int i=0; i<level; i++){
 		printf("\t");
@@ -427,8 +438,7 @@ void recursively_print_positions(Node* node, int level){
 }
 
 
-
-
+/* re-computes graph and draws everything onto renderer */
 void prepareScene() {
 	SDL_SetRenderDrawColor(app.renderer, 0, 0, 0, 255);
 	SDL_RenderClear(app.renderer);
@@ -448,6 +458,7 @@ void prepareScene() {
 	drawNode(graph.root);
 }
 
+/* actually renders the screen */
 void presentScene() {
 	SDL_RenderPresent(app.renderer);
 }
