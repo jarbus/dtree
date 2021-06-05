@@ -1,11 +1,14 @@
 // TODO
-// figure out how to wrap messages
+// https://wiki.libsdl.org/SDL_StartTextInput
+// get full stream of characters, you'll need to implement everything yourself
+//     use an Array of characters for the text instead of a char*
 // https://www.parallelrealities.co.uk/tutorials/#shooter
 // https://lazyfoo.net/tutorials/SDL/32_text_input_and_clipboard_handling/index.php
 // marks: `s for structs
 // 		  `f for functions
 // 		  `m for main function
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_events.h>
 #include <SDL2/SDL_ttf.h>
 #include "SDL_events.h"
 #include "SDL_scancode.h"
@@ -37,6 +40,7 @@ static int FONT_SIZE = 40;
 static int TEXTBOX_WIDTH = 400;
 static int TEXTBOX_HEIGHT = 100;
 
+static char* PREVIOUS_TEXT_EVENT = NULL;
 
 enum Mode{Default, Edit, Travel};
 
@@ -176,7 +180,7 @@ void initSDL() {
 
 void doKeyDown(SDL_KeyboardEvent *event) {
 	if (event->repeat == 0) {
-		if (event->keysym.scancode == SDL_SCANCODE_Q) {
+		if (event->keysym.sym == SDLK_q) {
 			app.quit = 1;
 		}
 	}
@@ -184,30 +188,56 @@ void doKeyDown(SDL_KeyboardEvent *event) {
 
 void doKeyUp(SDL_KeyboardEvent *event) {
 	if (event->repeat == 0) {
-		if (event->keysym.scancode == SDL_SCANCODE_O) {
-			makeChild(graph.selected);
-		}
-		if (event->keysym.scancode == SDL_SCANCODE_H) {
-			if ( graph.selected->children->num >= 1 ){
-				graph.selected = graph.selected->children->array[0];
+		if ( graph.mode != Edit ){
+            if (event->keysym.sym == SDLK_o) {
+				makeChild(graph.selected);
+			}
+			if (event->keysym.sym == SDLK_h) {
+				if ( graph.selected->children->num >= 1 ){
+					graph.selected = graph.selected->children->array[0];
+				}
+			}
+			if (event->keysym.sym == SDLK_l) {
+				if ( graph.selected->children->num >= 1 ){
+					graph.selected = graph.selected->children->array[graph.selected->children->num-1];
+				}
+			}
+			if (event->keysym.sym == SDLK_k) {
+				graph.selected = graph.selected->p;
+			}
+
+			if (event->keysym.sym == SDLK_t) {
+				graph.mode = Travel;
 			}
 		}
-		if (event->keysym.scancode == SDL_SCANCODE_L) {
-			if ( graph.selected->children->num >= 1 ){
-				graph.selected = graph.selected->children->array[graph.selected->children->num-1];
+
+		// Check SDLK is software character, SCANCODE is hardware
+		if (event->keysym.sym == SDLK_ESCAPE){
+			if ( graph.mode == Travel )
+				graph.mode = Default;
+			if ( graph.mode == Edit ){
+				graph.mode = Default;
+				printf("previous text event %s\n", PREVIOUS_TEXT_EVENT);
+				graph.root->text = PREVIOUS_TEXT_EVENT;
+				printf("SDL_StopTextInput()\n");
+				SDL_StopTextInput();
 			}
 		}
-		if (event->keysym.scancode == SDL_SCANCODE_K) {
-			graph.selected = graph.selected->p;
+		if (event->keysym.sym == SDLK_e){
+			if ( graph.mode != Edit ){
+				graph.mode = Edit;
+				printf("SDL_StartTextInput()\n");
+				SDL_StartTextInput();
+			}
 		}
-		if (event->keysym.scancode == SDL_SCANCODE_MINUS){
+		if (event->keysym.sym == SDLK_MINUS){
 			LAYER_MARGIN /= SCALE;
 			RADIUS = (int) RADIUS / SCALE;
 			THICKNESS = (int) THICKNESS / SCALE;
 			LEFT_BOUNDARY -= SIDE_MARGIN * SCALE;
 			RIGHT_BOUNDARY -= SCALE;
 		}
-		if (event->keysym.scancode == SDL_SCANCODE_EQUALS){
+		if (event->keysym.sym == SDLK_EQUALS){
 			LAYER_MARGIN *= SCALE;
 			RADIUS = (int) RADIUS * SCALE;
 			THICKNESS = (int) THICKNESS * SCALE;
@@ -220,6 +250,12 @@ void doKeyUp(SDL_KeyboardEvent *event) {
 void eventHandler(SDL_Event *event) {
 	switch (event->type)
 	{
+
+		case SDL_TEXTINPUT:
+			printf("%s\n",event->edit.text);
+			PREVIOUS_TEXT_EVENT = event->edit.text;
+			break;
+
 		case SDL_KEYDOWN:
 			doKeyDown(&event->key);
 			break;
@@ -238,7 +274,7 @@ void eventHandler(SDL_Event *event) {
 				app.window_size.x = w;
 				app.window_size.y = h;
 			}
-		break;
+			break;
 
 		case SDL_QUIT:
 			exit(0);
@@ -333,7 +369,8 @@ void drawNode(Node* node) {
 	message_pos.x = (int) ((node->pos.x) * app.window_size.x)  - (int)(TEXTBOX_WIDTH / 2);
 	message_pos.y = (int) ((node->pos.y) * app.window_size.y)  - (int)(TEXTBOX_HEIGHT / 2);
 
-	renderMessage(node->text, message_pos);
+	if ( graph.mode == Travel )
+		renderMessage(node->text, message_pos);
 
 	/* draw edges between parent and child nodes */
 	if (node != graph.root){
@@ -481,18 +518,18 @@ void presentScene() {
 Array* initArray(size_t initialSize) {
 	Array *a;
 	a = calloc(1, sizeof(Array));
-  	a->array = calloc(initialSize, sizeof(Node*));
+  	a->array = calloc(initialSize, sizeof(void*));
   	a->num = 0;
   	a->size = initialSize;
 	return a;
 }
 
-void insertArray(Array *a, Node* element) {
+void insertArray(Array *a, void* element) {
 	// a->num is the number of used entries, because a->array[a->num++] updates a->num only *after* the array has been accessed.
 	// Therefore a->num can go up to a->size
 	if (a->num == a->size) {
 		a->size *= 2;
-		a->array = realloc(a->array, a->size * sizeof(Node*));
+		a->array = realloc(a->array, a->size * sizeof(void*));
 	}
 	a->array[a->num++] = element;
 }
