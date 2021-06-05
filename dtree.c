@@ -1,7 +1,9 @@
 // TODO
 // https://wiki.libsdl.org/SDL_StartTextInput
 // get full stream of characters, you'll need to implement everything yourself
-//     use an Array of characters for the text instead of a char*
+//     use an Array of characters for the text instead of a Node*
+//     - might not be doable, might need to manage array myself
+//
 // https://www.parallelrealities.co.uk/tutorials/#shooter
 // https://lazyfoo.net/tutorials/SDL/32_text_input_and_clipboard_handling/index.php
 // marks: `s for structs
@@ -40,7 +42,7 @@ static int FONT_SIZE = 40;
 static int TEXTBOX_WIDTH = 400;
 static int TEXTBOX_HEIGHT = 100;
 
-static char* PREVIOUS_TEXT_EVENT = NULL;
+static int MAX_TEXT_LEN = 32;
 
 enum Mode{Default, Edit, Travel};
 
@@ -78,6 +80,7 @@ struct Node {
 	struct Array* children;
 	struct DoublePoint pos;
     char* text;
+    int text_len;
 };
 
 struct Graph {
@@ -217,8 +220,6 @@ void doKeyUp(SDL_KeyboardEvent *event) {
 				graph.mode = Default;
 			if ( graph.mode == Edit ){
 				graph.mode = Default;
-				printf("previous text event %s\n", PREVIOUS_TEXT_EVENT);
-				graph.root->text = PREVIOUS_TEXT_EVENT;
 				printf("SDL_StopTextInput()\n");
 				SDL_StopTextInput();
 			}
@@ -252,8 +253,14 @@ void eventHandler(SDL_Event *event) {
 	{
 
 		case SDL_TEXTINPUT:
-			printf("%s\n",event->edit.text);
-			PREVIOUS_TEXT_EVENT = event->edit.text;
+			if (graph.mode == Edit){
+				printf("%s %d/%d\n",event->edit.text, graph.selected->text_len, MAX_TEXT_LEN);
+
+                graph.selected->text[graph.selected->text_len];
+				printf("%c\n", event->edit.text[0]);
+				if ( graph.selected->text_len < MAX_TEXT_LEN )
+					graph.selected->text[graph.selected->text_len++] = event->edit.text[0];
+			}
 			break;
 
 		case SDL_KEYDOWN:
@@ -548,7 +555,8 @@ Node* makeNode(){
 	node->children->num = 0;
 	node->pos.x = 0;
 	node->pos.y = 0;
-	node->text = NULL;
+	node->text = calloc(32, sizeof(char));
+	node->text_len = 0;
 	return node;
 }
 
@@ -571,6 +579,7 @@ void deleteNode(Node* node){
 	}
 	/* Then delete node */
 	freeArray(node->children);
+	free(node->text);
 	free(node);
 }
 
@@ -579,7 +588,6 @@ void makeGraph(){
 	graph.num_nodes = 0;
 	graph.selected = graph.root;
 	graph.mode = Default;
-	graph.root->text = "HELLO THERE";
 }
 
 int main(int argc, char *argv[]) {
