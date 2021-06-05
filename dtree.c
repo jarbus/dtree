@@ -30,6 +30,12 @@ static double SIDE_MARGIN = 0.3;
 
 static double SCALE = 1.5;
 
+static TTF_Font* FONT;
+static int FONT_SIZE = 40;
+
+// width and heigh of text boxes
+static int TEXTBOX_WIDTH = 400;
+static int TEXTBOX_HEIGHT = 100;
 
 
 enum Mode{Default, Edit, Travel};
@@ -38,6 +44,7 @@ typedef struct Node Node;
 typedef struct Array Array;
 typedef struct Graph Graph;
 typedef struct Point Point;
+typedef struct DoublePoint DoublePoint;
 typedef struct App App;
 struct Point {
 	int x;
@@ -66,6 +73,7 @@ struct Node {
 	struct Node* p;
 	struct Array* children;
 	struct DoublePoint pos;
+    char* text;
 };
 
 struct Graph {
@@ -86,7 +94,7 @@ void eventHandler(SDL_Event *event);
 void set_pixel(SDL_Renderer *rend, int x, int y, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
 void drawCircle(SDL_Renderer *surface, int n_cx, int n_cy, int radius, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
 void drawRing(SDL_Renderer *surface, int n_cx, int n_cy, int radius, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
-void renderMessage(char* message);
+void renderMessage(char* message, Point pos);
 void presentScene();
 void prepareScene();
 Node* makeNode();
@@ -145,6 +153,25 @@ void initSDL() {
 		return;
 	}
 	atexit(TTF_Quit); /* remember to quit SDL_ttf */
+
+	//this opens a font style and sets a size
+	FONT = TTF_OpenFont("/home/jack/drive/cs2/dtree/assets/FiraSans-Regular.ttf", FONT_SIZE);
+
+	printf("TTF_FontHeight          : %d\n",TTF_FontHeight(FONT));
+	printf("TTF_FontAscent          : %d\n",TTF_FontAscent(FONT));
+	printf("TTF_FontDescent         : %d\n",TTF_FontDescent(FONT));
+	printf("TTF_FontLineSkip        : %d\n",TTF_FontLineSkip(FONT));
+	printf("TTF_FontFaceIsFixedWidth: %d\n",TTF_FontFaceIsFixedWidth(FONT));
+
+	char *str=TTF_FontFaceFamilyName(FONT);
+	if(!str)
+		str="(null)";
+	printf("TTF_FontFaceFamilyName  : \"%s\"\n",str);
+
+ 	if(FONT == NULL) {
+		printf("TTF_OpenFont: %s\n", TTF_GetError());
+		// handle error
+	}
 }
 
 void doKeyDown(SDL_KeyboardEvent *event) {
@@ -302,6 +329,12 @@ void drawNode(Node* node) {
 	else
 		drawRing(app.renderer, x, y, RADIUS, THICKNESS, 0x00, 0xFF, 0x00, 0x00);
 
+	Point message_pos;
+	message_pos.x = (int) ((node->pos.x) * app.window_size.x)  - (int)(TEXTBOX_WIDTH / 2);
+	message_pos.y = (int) ((node->pos.y) * app.window_size.y)  - (int)(TEXTBOX_HEIGHT / 2);
+
+	renderMessage(node->text, message_pos);
+
 	/* draw edges between parent and child nodes */
 	if (node != graph.root){
 		int px = (int) ((node->p->pos.x) * app.window_size.x);
@@ -317,53 +350,35 @@ void drawNode(Node* node) {
 }
 
 // testing SDL_TTF font rendering
-void renderMessage(char* message){
+void renderMessage(char* message, Point pos){
+	if (!message)
+		return;
 
-	//this opens a font style and sets a size
-	TTF_Font* Sans = TTF_OpenFont("/home/jack/drive/cs2/dtree/assets/FiraSans-Regular.ttf", 20);
- 	if(Sans == NULL) {
-		printf("TTF_OpenFont: %s\n", TTF_GetError());
-		// handle error
-	}
-	// this is the color in rgb format,
-	// maxing out all would give you the color white,
-	// and it will be your text's color
-	SDL_Color White = {255, 255, 255};
+	SDL_Color color = {255, 255, 255};
 
 	if ( DEBUG )
 		printf("rendering %s\n", message);
-	// as TTF_RenderText_Solid could only be used on
-	// SDL_Surface then you have to create the surface first
+
+	// create surface from string
 	SDL_Surface* surfaceMessage =
-		TTF_RenderText_Blended_Wrapped(Sans, "hi there", White, 30);
+		TTF_RenderText_Solid(FONT, message, color);
+	//                                                       ^ wrapped len
 
 	// now you can convert it into a texture
 	SDL_Texture* Message = SDL_CreateTextureFromSurface(app.renderer, surfaceMessage);
 
 	SDL_Rect Message_rect; //create a rect
-	Message_rect.x = 400;  //controls the rect's x coordinate
-	Message_rect.y = 400; // controls the rect's y coordinte
-	Message_rect.w = 100; // controls the width of the rect
-	Message_rect.h = 100; // controls the height of the rect
+	Message_rect.x = pos.x;  //controls the rect's x coordinate
+	Message_rect.y = pos.y; // controls the rect's y coordinte
+	Message_rect.w = TEXTBOX_WIDTH; // controls the width of the rect
+	Message_rect.h = TEXTBOX_HEIGHT; // controls the height of the rect
 
-
-	// (0,0) is on the top left of the window/screen,
-	// think a rect as the text's box,
-	// that way it would be very simple to understand
-
-	// Now since it's a texture, you have to put RenderCopy
-	// in your game loop area, the area where the whole code executes
-
-	// you put the renderer's name first, the Message,
-	// the crop size (you can ignore this if you don't want
-	// to dabble with cropping), and the rect which is the size
-	// and coordinate of your texture
+	// Copy message to the renderer
 	SDL_RenderCopy(app.renderer, Message, NULL, &Message_rect);
 
 	// Don't forget to free your surface and texture
 	SDL_FreeSurface(surfaceMessage);
 	SDL_DestroyTexture(Message);
-
 }
 
 
@@ -496,6 +511,7 @@ Node* makeNode(){
 	node->children->num = 0;
 	node->pos.x = 0;
 	node->pos.y = 0;
+	node->text = NULL;
 	return node;
 }
 
@@ -526,6 +542,7 @@ void makeGraph(){
 	graph.num_nodes = 0;
 	graph.selected = graph.root;
 	graph.mode = Default;
+	graph.root->text = "HELLO THERE";
 }
 
 int main(int argc, char *argv[]) {
@@ -555,8 +572,6 @@ int main(int argc, char *argv[]) {
 		eventHandler(&e);
 
 		prepareScene();
-		char* message = "HELLO";
-		renderMessage(message);
 
 		presentScene();
 
