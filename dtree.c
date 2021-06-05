@@ -1,8 +1,8 @@
 // TODO
+// SDLK is software character, SCANCODE is hardware
 // https://wiki.libsdl.org/SDL_StartTextInput
 // get full stream of characters, you'll need to implement everything yourself
-//     use an Array of characters for the text instead of a Node*
-//     - might not be doable, might need to manage array myself
+// - add, copy, paste functionality
 //
 // https://www.parallelrealities.co.uk/tutorials/#shooter
 // https://lazyfoo.net/tutorials/SDL/32_text_input_and_clipboard_handling/index.php
@@ -39,7 +39,7 @@ static TTF_Font* FONT;
 static int FONT_SIZE = 40;
 
 // width and heigh of text boxes
-static int TEXTBOX_WIDTH = 400;
+static int TEXTBOX_WIDTH_SCALE = 40;
 static int TEXTBOX_HEIGHT = 100;
 
 static int MAX_TEXT_LEN = 32;
@@ -101,7 +101,7 @@ void eventHandler(SDL_Event *event);
 void set_pixel(SDL_Renderer *rend, int x, int y, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
 void drawCircle(SDL_Renderer *surface, int n_cx, int n_cy, int radius, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
 void drawRing(SDL_Renderer *surface, int n_cx, int n_cy, int radius, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
-void renderMessage(char* message, Point pos);
+void renderMessage(char* message, Point pos, double width, double height);
 void presentScene();
 void prepareScene();
 Node* makeNode();
@@ -212,9 +212,9 @@ void doKeyUp(SDL_KeyboardEvent *event) {
 			if (event->keysym.sym == SDLK_t) {
 				graph.mode = Travel;
 			}
+
 		}
 
-		// Check SDLK is software character, SCANCODE is hardware
 		if (event->keysym.sym == SDLK_ESCAPE){
 			if ( graph.mode == Travel )
 				graph.mode = Default;
@@ -222,6 +222,13 @@ void doKeyUp(SDL_KeyboardEvent *event) {
 				graph.mode = Default;
 				printf("SDL_StopTextInput()\n");
 				SDL_StopTextInput();
+			}
+		}
+
+		if (event->keysym.sym == SDLK_BACKSPACE){
+			if ( graph.selected->text_len > 0 ){
+				graph.selected->text_len--;
+				graph.selected->text[graph.selected->text_len] = '\0';
 			}
 		}
 		if (event->keysym.sym == SDLK_e){
@@ -254,10 +261,6 @@ void eventHandler(SDL_Event *event) {
 
 		case SDL_TEXTINPUT:
 			if (graph.mode == Edit){
-				printf("%s %d/%d\n",event->edit.text, graph.selected->text_len, MAX_TEXT_LEN);
-
-                graph.selected->text[graph.selected->text_len];
-				printf("%c\n", event->edit.text[0]);
 				if ( graph.selected->text_len < MAX_TEXT_LEN )
 					graph.selected->text[graph.selected->text_len++] = event->edit.text[0];
 			}
@@ -373,11 +376,12 @@ void drawNode(Node* node) {
 		drawRing(app.renderer, x, y, RADIUS, THICKNESS, 0x00, 0xFF, 0x00, 0x00);
 
 	Point message_pos;
-	message_pos.x = (int) ((node->pos.x) * app.window_size.x)  - (int)(TEXTBOX_WIDTH / 2);
+	message_pos.x = (int) ((node->pos.x) * app.window_size.x)  - (int)((TEXTBOX_WIDTH_SCALE*node->text_len) / 2);
+	/* message_pos.x = (int) ((node->pos.x) * app.window_size.x)  - (int)(TEXTBOX_WIDTH / 2); */
 	message_pos.y = (int) ((node->pos.y) * app.window_size.y)  - (int)(TEXTBOX_HEIGHT / 2);
 
-	if ( graph.mode == Travel )
-		renderMessage(node->text, message_pos);
+	/* if ( graph.mode == Travel ) */
+	renderMessage(node->text, message_pos, TEXTBOX_WIDTH_SCALE*node->text_len, TEXTBOX_HEIGHT);
 
 	/* draw edges between parent and child nodes */
 	if (node != graph.root){
@@ -394,7 +398,7 @@ void drawNode(Node* node) {
 }
 
 // testing SDL_TTF font rendering
-void renderMessage(char* message, Point pos){
+void renderMessage(char* message, Point pos, double width, double height){
 	if (!message)
 		return;
 
@@ -414,8 +418,8 @@ void renderMessage(char* message, Point pos){
 	SDL_Rect Message_rect; //create a rect
 	Message_rect.x = pos.x;  //controls the rect's x coordinate
 	Message_rect.y = pos.y; // controls the rect's y coordinte
-	Message_rect.w = TEXTBOX_WIDTH; // controls the width of the rect
-	Message_rect.h = TEXTBOX_HEIGHT; // controls the height of the rect
+	Message_rect.w = width; // controls the width of the rect
+	Message_rect.h = height; // controls the height of the rect
 
 	// Copy message to the renderer
 	SDL_RenderCopy(app.renderer, Message, NULL, &Message_rect);
