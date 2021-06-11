@@ -3,7 +3,7 @@
 // get full stream of characters, you'll need to implement everything yourself
 // - add, copy, paste functionality
 // - fix boundary compute
-// - delete node (handle updating parents)
+// - saving and reading from custom file name
 //
 //
 // https://www.parallelrealities.co.uk/tutorials/#shooter
@@ -566,6 +566,7 @@ void* popArray(Array *a){
 		a->num -= 1;
 		return ret;
 	}
+	return NULL;
 }
 
 void freeArray(Array *a) {
@@ -714,7 +715,7 @@ void readfile(const char* fname){
 
 int main(int argc, char *argv[]) {
 
-	const char* filename = "test.txt";
+    const char* filename;
 	/* set all bytes of App memory to zero */
 	memset(&app, 0, sizeof(App));
 
@@ -723,7 +724,10 @@ int main(int argc, char *argv[]) {
 
 	makeGraph();
 
-	readfile(filename);
+	if ( argc > 1 ){
+		filename = argv[1];
+		readfile(filename);
+	}
 	/* gracefully close windows on exit of program */
 	atexit(SDL_Quit);
 
@@ -757,8 +761,5 @@ int main(int argc, char *argv[]) {
 
     //Quit SDL subsystems
     SDL_Quit();
-
-	printf("shutting down\n");
-
 	return 0;
 }
