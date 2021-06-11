@@ -1,8 +1,11 @@
 // TODO
 // SDLK is software character, SCANCODE is hardware
-// https://wiki.libsdl.org/SDL_StartTextInput
 // get full stream of characters, you'll need to implement everything yourself
 // - add, copy, paste functionality
+// - reading
+// - fix boundary compute
+// - delete node
+//
 //
 // https://www.parallelrealities.co.uk/tutorials/#shooter
 // https://lazyfoo.net/tutorials/SDL/32_text_input_and_clipboard_handling/index.php
@@ -16,6 +19,7 @@
 #include "SDL_scancode.h"
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
 
 #define DEBUG 0
 
@@ -43,6 +47,8 @@ static int TEXTBOX_WIDTH_SCALE = 40;
 static int TEXTBOX_HEIGHT = 100;
 
 static int MAX_TEXT_LEN = 32;
+
+static unsigned int BUF_SIZE = 128;
 
 enum Mode{Default, Edit, Travel};
 
@@ -110,6 +116,9 @@ void drawNode(Node* node);
 void compute_root_bounds_from_selected_and_update_pos_children(Node* node, double leftmost_bound, double rightmost_bound, double level);
 void update_pos_children(Node* node, double leftmost_bound, double rightmost_bound, double level);
 void recursively_print_positions(Node* node, int level);
+void write(char* filename);
+void writeChildrenStrings(FILE* file, Node* node, int level);
+void readfile(const char* filename);
 
 double clip(double num, double min, double max){
 	if ( num < min )
@@ -126,10 +135,12 @@ void initSDL() {
 
 	windowFlags = SDL_WINDOW_RESIZABLE;
 
+	printf("initing video\n");
 	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
 		printf("Couldn't initialize SDL: %s\n", SDL_GetError());
 		exit(1);
 	}
+	printf("inited video\n");
 
 	app.window = SDL_CreateWindow("dtree", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, windowFlags);
 
@@ -559,7 +570,7 @@ Node* makeNode(){
 	node->children->num = 0;
 	node->pos.x = 0;
 	node->pos.y = 0;
-	node->text = calloc(32, sizeof(char));
+	node->text = calloc(MAX_TEXT_LEN, sizeof(char));
 	node->text_len = 0;
 	return node;
 }
@@ -591,11 +602,90 @@ void makeGraph(){
 	graph.root = makeNode();
 	graph.num_nodes = 0;
 	graph.selected = graph.root;
+	graph.root->p = graph.root;
 	graph.mode = Default;
+}
+
+
+/* Recursively print children of nodes, with each child indented once from the parent */
+void writeChildrenStrings(FILE* file, Node* node, int level){
+	for(int i=0; i<level;i++)
+		fprintf(file, "\t");
+	fprintf(file, node->text);
+	fprintf(file, "\n");
+	for (int i=0; i<node->children->num; i++){
+		writeChildrenStrings(file, node->children->array[i], level + 1);
+	}
+}
+
+
+void write(char* filename){
+ 	FILE* output = fopen(filename, "w");
+	writeChildrenStrings(output, graph.root, 0);
+	fclose(output);
+}
+
+unsigned int countTabs(char* string){
+	unsigned int num_tabs = 0;
+	for (int i=0; i<strlen(string); i++){
+		if (string[i] == '\t')
+			num_tabs++;
+		else
+			break;
+	}
+	return num_tabs;
+}
+
+void endAtNewline(char* string, int textlen){
+	for (int i = 0; i < textlen; ++i) {
+		printf("for loop\n");
+ 		if (string[i] == '\n') {
+			string[i] = '\0';
+			break;
+ 		}
+	}
+}
+
+void readfile(const char* fname){
+
+ 	FILE* fp = fopen(fname, "r");
+	/* buffer to store lines */
+	char* buf = calloc(BUF_SIZE, sizeof(char));
+  	/* load first line of file */
+	char* ret = fgets(buf, BUF_SIZE, fp);
+	/* keep references to all nodes that can have children added,
+	 * one per each level */
+	Node** hierarchy = calloc(BUF_SIZE, sizeof(Node*));
+	unsigned int level = 0;
+	/* Load graph root manually */
+	hierarchy[0] = graph.root;
+	endAtNewline(ret, strlen(ret));
+	strcpy(graph.root->text, ret);
+	graph.root->text_len = strlen(ret);
+	while ( true ){
+		/* loads next line */
+		ret = fgets(buf, BUF_SIZE, fp);
+		/* reached EOF */
+		if ( ret != buf )
+			break;
+		/* remove any trailing newlines */
+		endAtNewline(ret, strlen(ret));
+		/* determine level in tree by number of tabs */
+		level = countTabs(ret);
+		/* create new child node */
+		hierarchy[level] = makeChild(hierarchy[level-1]);
+        /* copy current line to child node */
+		strcpy(hierarchy[level]->text, ret + level);
+		hierarchy[level]->text_len = strlen(ret);
+	}
+	int status = fclose(fp);
+	free(buf);
+	free(hierarchy);
 }
 
 int main(int argc, char *argv[]) {
 
+	const char* filename = "test.txt";
 	/* set all bytes of App memory to zero */
 	memset(&app, 0, sizeof(App));
 
@@ -604,6 +694,7 @@ int main(int argc, char *argv[]) {
 
 	makeGraph();
 
+	readfile(filename);
 	/* gracefully close windows on exit of program */
 	atexit(SDL_Quit);
 
@@ -626,6 +717,7 @@ int main(int argc, char *argv[]) {
 
 		SDL_Delay(0);
 	}
+	write("test.txt");
 
 	/* delete nodes recursively, starting from root */
 	deleteNode(graph.root);
