@@ -2,9 +2,8 @@
 // SDLK is software character, SCANCODE is hardware
 // get full stream of characters, you'll need to implement everything yourself
 // - add, copy, paste functionality
-// - reading
 // - fix boundary compute
-// - delete node
+// - delete node (handle updating parents)
 //
 //
 // https://www.parallelrealities.co.uk/tutorials/#shooter
@@ -119,6 +118,8 @@ void recursively_print_positions(Node* node, int level);
 void write(char* filename);
 void writeChildrenStrings(FILE* file, Node* node, int level);
 void readfile(const char* filename);
+void deleteNode(Node* node);
+void removeNodeFromGraph(Node* node);
 
 double clip(double num, double min, double max){
 	if ( num < min )
@@ -205,6 +206,9 @@ void doKeyUp(SDL_KeyboardEvent *event) {
 		if ( graph.mode != Edit ){
             if (event->keysym.sym == SDLK_o) {
 				makeChild(graph.selected);
+			}
+            if (event->keysym.sym == SDLK_d) {
+				removeNodeFromGraph(graph.selected);
 			}
 			if (event->keysym.sym == SDLK_h) {
 				if ( graph.selected->children->num >= 1 ){
@@ -555,6 +559,14 @@ void insertArray(Array *a, void* element) {
 	}
 	a->array[a->num++] = element;
 }
+void* popArray(Array *a){
+	if (a->num > 0){
+		void* ret = a->array[a->num];
+		a->array[a->num] = NULL;
+		a->num -= 1;
+		return ret;
+	}
+}
 
 void freeArray(Array *a) {
 	free(a->array);
@@ -592,10 +604,28 @@ void deleteNode(Node* node){
 	for (int i=0; i<node->children->num; i++){
 		deleteNode( node->children->array[i] );
 	}
+
 	/* Then delete node */
 	freeArray(node->children);
 	free(node->text);
 	free(node);
+}
+
+void removeNodeFromGraph(Node* node){
+
+	bool start_shifting = false;
+	Node** siblings = node->p->children->array;
+	/* shift all siblings right of node over by one in the parent */
+	for (int i = 0; i < node->p->children->num-1; ++i) {
+		if ( siblings[i] == node )
+			start_shifting = true;
+		if ( start_shifting )
+			siblings[i] = siblings[i+1];
+	}
+	popArray(node->p->children);
+	graph.selected = node->p;
+	deleteNode(node);
+
 }
 
 void makeGraph(){
@@ -638,7 +668,6 @@ unsigned int countTabs(char* string){
 
 void endAtNewline(char* string, int textlen){
 	for (int i = 0; i < textlen; ++i) {
-		printf("for loop\n");
  		if (string[i] == '\n') {
 			string[i] = '\0';
 			break;
