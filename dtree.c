@@ -1,16 +1,13 @@
 // TODO
 // SDLK is software character, SCANCODE is hardware
-// get full stream of characters, you'll need to implement everything yourself
+// - travel mode (debug prototype)
 // - add, copy, paste functionality
-// - fix boundary compute
-// - saving and reading from custom file name
-//
 //
 // https://www.parallelrealities.co.uk/tutorials/#shooter
 // https://lazyfoo.net/tutorials/SDL/32_text_input_and_clipboard_handling/index.php
 // marks: `s for structs
-// 		  `f for functions
-// 		  `m for main function
+//		  `f for functions
+//		  `m for main function
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_ttf.h>
@@ -25,6 +22,8 @@
 #define SCREEN_WIDTH   1280
 #define SCREEN_HEIGHT  720
 
+/* static const char* TRAVEL_CHARS = "asdfghjl;"; */
+
 // radius and thickness of node ring
 static int RADIUS = 50;
 static int THICKNESS = 10;
@@ -34,7 +33,8 @@ static double RIGHT_BOUNDARY = 0.8;
 
 // Spacing between layers of tree
 static double LAYER_MARGIN = 0.3;
-static double SIDE_MARGIN = 0.3;
+// Spacing between edge of screen and node
+static double SIDE_MARGIN = 0.2;
 
 static double SCALE = 1.5;
 
@@ -44,8 +44,8 @@ static int FONT_SIZE = 40;
 // width and heigh of text boxes
 static int TEXTBOX_WIDTH_SCALE = 40;
 static int TEXTBOX_HEIGHT = 100;
-
 static int MAX_TEXT_LEN = 32;
+/* static int MAX_NUM_TRAVEL_CHARS = 2; */
 
 static unsigned int BUF_SIZE = 128;
 
@@ -86,6 +86,7 @@ struct Node {
 	struct DoublePoint pos;
 	char* text;
 	int text_len;
+	/* char* travel_text; */
 };
 
 struct Graph {
@@ -120,6 +121,7 @@ void writeChildrenStrings(FILE* file, Node* node, int level);
 void readfile(const char* filename);
 void deleteNode(Node* node);
 void removeNodeFromGraph(Node* node);
+/* void populateTravelText(Node* node); */
 
 double clip(double num, double min, double max){
 	if ( num < min )
@@ -145,6 +147,7 @@ void initSDL() {
 
 	app.window = SDL_CreateWindow("dtree", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, windowFlags);
 
+
 	if (!app.window) {
 		printf("Failed to open %d x %d window: %s\n", SCREEN_WIDTH, SCREEN_HEIGHT, SDL_GetError());
 		exit(1);
@@ -152,7 +155,9 @@ void initSDL() {
 
 	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
 
+	printf("creating renderer\n");
 	app.renderer = SDL_CreateRenderer(app.window, -1, rendererFlags);
+	printf("created renderer\n");
 
 	if (!app.renderer) {
 		printf("Failed to create renderer: %s\n", SDL_GetError());
@@ -187,7 +192,7 @@ void initSDL() {
 		str="(null)";
 	printf("TTF_FontFaceFamilyName  : \"%s\"\n",str);
 
- 	if(FONT == NULL) {
+	if(FONT == NULL) {
 		printf("TTF_OpenFont: %s\n", TTF_GetError());
 		// handle error
 	}
@@ -207,6 +212,12 @@ void doKeyUp(SDL_KeyboardEvent *event) {
 			if (event->keysym.sym == SDLK_o) {
 				makeChild(graph.selected);
 			}
+			/* if (event->keysym.sym == SDLK_t) { */
+				/* if ( graph.mode == Travel ) */
+					/* graph.mode = Default; */
+				/* else */
+					/* graph.mode = Travel; */
+			/* } */
 			if (event->keysym.sym == SDLK_d) {
 				removeNodeFromGraph(graph.selected);
 			}
@@ -224,18 +235,17 @@ void doKeyUp(SDL_KeyboardEvent *event) {
 				graph.selected = graph.selected->p;
 			}
 
-			if (event->keysym.sym == SDLK_t) {
-				graph.mode = Travel;
-			}
+			/* if (event->keysym.sym == SDLK_t) { */
+			/*	graph.mode = Travel; */
+			/* } */
 
 		}
 
 		if (event->keysym.sym == SDLK_ESCAPE){
-			if ( graph.mode == Travel )
-				graph.mode = Default;
+			/* if ( graph.mode == Travel ) */
+			/*	graph.mode = Default; */
 			if ( graph.mode == Edit ){
 				graph.mode = Default;
-				printf("SDL_StopTextInput()\n");
 				SDL_StopTextInput();
 			}
 		}
@@ -273,11 +283,13 @@ void doKeyUp(SDL_KeyboardEvent *event) {
 void eventHandler(SDL_Event *event) {
 	switch (event->type)
 	{
-
 		case SDL_TEXTINPUT:
 			if (graph.mode == Edit){
 				if ( graph.selected->text_len < MAX_TEXT_LEN )
 					graph.selected->text[graph.selected->text_len++] = event->edit.text[0];
+			}
+			if (graph.mode == Travel){
+				// go to node specified by travel chars
 			}
 			break;
 
@@ -392,11 +404,19 @@ void drawNode(Node* node) {
 
 	Point message_pos;
 	message_pos.x = (int) ((node->pos.x) * app.window_size.x)  - (int)((TEXTBOX_WIDTH_SCALE*node->text_len) / 2);
-	/* message_pos.x = (int) ((node->pos.x) * app.window_size.x)  - (int)(TEXTBOX_WIDTH / 2); */
 	message_pos.y = (int) ((node->pos.y) * app.window_size.y)  - (int)(TEXTBOX_HEIGHT / 2);
 
-	/* if ( graph.mode == Travel ) */
+	/* render node text */
 	renderMessage(node->text, message_pos, TEXTBOX_WIDTH_SCALE*node->text_len, TEXTBOX_HEIGHT);
+	/* render travel text */
+	/* if ( graph.mode == Travel ){ */
+	/* 	if (strlen(node->travel_text) > 0){ */
+	/* 		// position char in center of node */
+	/* 		message_pos.x = (int) ((node->pos.x) * app.window_size.x)  - (int)((TEXTBOX_WIDTH_SCALE) / 2); */
+	/* 		message_pos.y = (int) ((node->pos.y) * app.window_size.y)  - (int)(TEXTBOX_HEIGHT / 2); */
+	/* 		renderMessage(node->travel_text, message_pos, TEXTBOX_WIDTH_SCALE, TEXTBOX_HEIGHT); */
+	/* 	} */
+	/* } */
 
 	/* draw edges between parent and child nodes */
 	if (node != graph.root){
@@ -454,6 +474,9 @@ void update_pos_children(Node* node, double leftmost_bound, double rightmost_bou
 
 	if ( DEBUG )
 		printf("update node position to %lf %lf\n", node->pos.x, node->pos.y);
+
+	/* if ( node == graph.selected ) */
+	/* 	printf("selected: %lf %lf\n", leftmost_bound, rightmost_bound); */
 
 	/* dont update children if no children */
 	if ( node->children->num == 0)
@@ -544,9 +567,9 @@ void presentScene() {
 Array* initArray(size_t initialSize) {
 	Array *a;
 	a = calloc(1, sizeof(Array));
-  	a->array = calloc(initialSize, sizeof(void*));
-  	a->num = 0;
-  	a->size = initialSize;
+	a->array = calloc(initialSize, sizeof(void*));
+	a->num = 0;
+	a->size = initialSize;
 	return a;
 }
 
@@ -585,6 +608,7 @@ Node* makeNode(){
 	node->pos.y = 0;
 	node->text = calloc(MAX_TEXT_LEN, sizeof(char));
 	node->text_len = 0;
+	/* node->travel_text = calloc(MAX_NUM_TRAVEL_CHARS, sizeof(char)); */
 	return node;
 }
 
@@ -609,6 +633,7 @@ void deleteNode(Node* node){
 	/* Then delete node */
 	freeArray(node->children);
 	free(node->text);
+	/* free(node->travel_text); */
 	free(node);
 }
 
@@ -637,13 +662,21 @@ void makeGraph(){
 	graph.mode = Default;
 }
 
+/* void populateTravelText(Node* node){ */
+/*	node->p->travel_text[0] = 'k'; */
+/*	if ( node->children->num > strlen(TRAVEL_CHARS) ) */
+/*		return; */
+/*	for (int i = 0; i < node->children->num; ++i) { */
+/*		node->children->array[i]->travel_text[0] = TRAVEL_CHARS[i]; */
+/*	} */
+
+/* } */
 
 /* Recursively print children of nodes, with each child indented once from the parent */
 void writeChildrenStrings(FILE* file, Node* node, int level){
 	for(int i=0; i<level;i++)
 		fprintf(file, "\t");
-	fprintf(file, node->text);
-	fprintf(file, "\n");
+	fprintf(file, "%s\n", node->text);
 	for (int i=0; i<node->children->num; i++){
 		writeChildrenStrings(file, node->children->array[i], level + 1);
 	}
@@ -651,7 +684,7 @@ void writeChildrenStrings(FILE* file, Node* node, int level){
 
 
 void write(char* filename){
- 	FILE* output = fopen(filename, "w");
+	FILE* output = fopen(filename, "w");
 	writeChildrenStrings(output, graph.root, 0);
 	fclose(output);
 }
@@ -669,19 +702,19 @@ unsigned int countTabs(char* string){
 
 void endAtNewline(char* string, int textlen){
 	for (int i = 0; i < textlen; ++i) {
- 		if (string[i] == '\n') {
+		if (string[i] == '\n') {
 			string[i] = '\0';
 			break;
- 		}
+		}
 	}
 }
 
 void readfile(const char* fname){
 
- 	FILE* fp = fopen(fname, "r");
+	FILE* fp = fopen(fname, "r");
 	/* buffer to store lines */
 	char* buf = calloc(BUF_SIZE, sizeof(char));
-  	/* load first line of file */
+	/* load first line of file */
 	char* ret = fgets(buf, BUF_SIZE, fp);
 	/* keep references to all nodes that can have children added,
 	 * one per each level */
@@ -708,7 +741,7 @@ void readfile(const char* fname){
 		strcpy(hierarchy[level]->text, ret + level);
 		hierarchy[level]->text_len = strlen(ret);
 	}
-	int status = fclose(fp);
+	fclose(fp);
 	free(buf);
 	free(hierarchy);
 }
