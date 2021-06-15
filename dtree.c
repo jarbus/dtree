@@ -1,6 +1,7 @@
 // TODO
 // SDLK is software character, SCANCODE is hardware
 // - travel mode (debug prototype)
+// - add way to edit file name
 // - add, copy, paste functionality
 //
 // https://www.parallelrealities.co.uk/tutorials/#shooter
@@ -22,7 +23,7 @@
 #define SCREEN_WIDTH   1280
 #define SCREEN_HEIGHT  720
 
-/* static const char* TRAVEL_CHARS = "asdfghjl;"; */
+static const char* TRAVEL_CHARS = "asdfghjl;";
 
 // radius and thickness of node ring
 static int RADIUS = 50;
@@ -45,11 +46,14 @@ static int FONT_SIZE = 40;
 static int TEXTBOX_WIDTH_SCALE = 40;
 static int TEXTBOX_HEIGHT = 100;
 static int MAX_TEXT_LEN = 32;
-/* static int MAX_NUM_TRAVEL_CHARS = 2; */
+static int MAX_NUM_TRAVEL_CHARS = 2;
 
 static unsigned int BUF_SIZE = 128;
 
 enum Mode{Default, Edit, Travel};
+
+static SDL_Color EDIT_COLOR = {255, 255, 255};
+static SDL_Color TRAVEL_COLOR = {255, 0, 0};
 
 typedef struct Node Node;
 typedef struct Array Array;
@@ -86,7 +90,7 @@ struct Node {
 	struct DoublePoint pos;
     char* text;
     int text_len;
-	/* char* travel_text; */
+	char* travel_text;
 };
 
 struct Graph {
@@ -107,7 +111,7 @@ void eventHandler(SDL_Event *event);
 void set_pixel(SDL_Renderer *rend, int x, int y, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
 void drawCircle(SDL_Renderer *surface, int n_cx, int n_cy, int radius, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
 void drawRing(SDL_Renderer *surface, int n_cx, int n_cy, int radius, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
-void renderMessage(char* message, Point pos, double width, double height);
+void renderMessage(char* message, Point pos, double width, double height, SDL_Color color);
 void presentScene();
 void prepareScene();
 Node* makeNode();
@@ -121,7 +125,7 @@ void writeChildrenStrings(FILE* file, Node* node, int level);
 void readfile(const char* filename);
 void deleteNode(Node* node);
 void removeNodeFromGraph(Node* node);
-/* void populateTravelText(Node* node); */
+void populateTravelText(Node* node);
 
 double clip(double num, double min, double max){
 	if ( num < min )
@@ -208,16 +212,10 @@ void doKeyDown(SDL_KeyboardEvent *event) {
 
 void doKeyUp(SDL_KeyboardEvent *event) {
 	if (event->repeat == 0) {
-		if ( graph.mode != Edit ){
+		if ( graph.mode == Default ){
             if (event->keysym.sym == SDLK_o) {
 				makeChild(graph.selected);
 			}
-            /* if (event->keysym.sym == SDLK_t) { */
-				/* if ( graph.mode == Travel ) */
-					/* graph.mode = Default; */
-				/* else */
-					/* graph.mode = Travel; */
-			/* } */
             if (event->keysym.sym == SDLK_d) {
 				removeNodeFromGraph(graph.selected);
 			}
@@ -234,19 +232,24 @@ void doKeyUp(SDL_KeyboardEvent *event) {
 			if (event->keysym.sym == SDLK_k) {
 				graph.selected = graph.selected->p;
 			}
-
-			/* if (event->keysym.sym == SDLK_t) { */
-			/* 	graph.mode = Travel; */
-			/* } */
-
 		}
 
 		if (event->keysym.sym == SDLK_ESCAPE){
-			/* if ( graph.mode == Travel ) */
-			/* 	graph.mode = Default; */
+			if ( graph.mode == Travel )
+				graph.mode = Default;
 			if ( graph.mode == Edit ){
 				graph.mode = Default;
 				SDL_StopTextInput();
+			}
+		}
+
+		if (event->keysym.sym == SDLK_t) {
+			if ( graph.mode != Travel ){
+				graph.mode = Travel;
+				populateTravelText(graph.selected);
+			}
+			else{
+				graph.mode = Default;
 			}
 		}
 
@@ -407,16 +410,16 @@ void drawNode(Node* node) {
 	message_pos.y = (int) ((node->pos.y) * app.window_size.y)  - (int)(TEXTBOX_HEIGHT / 2);
 
 	/* render node text */
-	renderMessage(node->text, message_pos, TEXTBOX_WIDTH_SCALE*node->text_len, TEXTBOX_HEIGHT);
+	renderMessage(node->text, message_pos, TEXTBOX_WIDTH_SCALE*node->text_len, TEXTBOX_HEIGHT, EDIT_COLOR);
 	/* render travel text */
-	/* if ( graph.mode == Travel ){ */
-	/* 	if (strlen(node->travel_text) > 0){ */
-	/* 		// position char in center of node */
-	/* 		message_pos.x = (int) ((node->pos.x) * app.window_size.x)  - (int)((TEXTBOX_WIDTH_SCALE) / 2); */
-	/* 		message_pos.y = (int) ((node->pos.y) * app.window_size.y)  - (int)(TEXTBOX_HEIGHT / 2); */
-	/* 		renderMessage(node->travel_text, message_pos, TEXTBOX_WIDTH_SCALE, TEXTBOX_HEIGHT); */
-	/* 	} */
-	/* } */
+	if ( graph.mode == Travel ){
+		if (strlen(node->travel_text) > 0){
+			// position char in center of node
+			message_pos.x = (int) ((node->pos.x) * app.window_size.x)  - (int)((TEXTBOX_WIDTH_SCALE) / 2) - RADIUS;
+			message_pos.y = (int) ((node->pos.y) * app.window_size.y)  - (int)(TEXTBOX_HEIGHT / 2) - RADIUS;
+			renderMessage(node->travel_text, message_pos, TEXTBOX_WIDTH_SCALE * 0.5, TEXTBOX_HEIGHT * 0.5, TRAVEL_COLOR);
+		}
+	}
 
 	/* draw edges between parent and child nodes */
 	if (node != graph.root){
@@ -433,11 +436,9 @@ void drawNode(Node* node) {
 }
 
 // testing SDL_TTF font rendering
-void renderMessage(char* message, Point pos, double width, double height){
+void renderMessage(char* message, Point pos, double width, double height, SDL_Color color){
 	if (!message)
 		return;
-
-	SDL_Color color = {255, 255, 255};
 
 	if ( DEBUG )
 		printf("rendering %s\n", message);
@@ -607,7 +608,7 @@ Node* makeNode(){
 	node->pos.y = 0;
 	node->text = calloc(MAX_TEXT_LEN, sizeof(char));
 	node->text_len = 0;
-	/* node->travel_text = calloc(MAX_NUM_TRAVEL_CHARS, sizeof(char)); */
+	node->travel_text = calloc(MAX_NUM_TRAVEL_CHARS, sizeof(char));
 	return node;
 }
 
@@ -632,7 +633,7 @@ void deleteNode(Node* node){
 	/* Then delete node */
 	freeArray(node->children);
 	free(node->text);
-	/* free(node->travel_text); */
+	free(node->travel_text);
 	free(node);
 }
 
@@ -661,15 +662,15 @@ void makeGraph(){
 	graph.mode = Default;
 }
 
-/* void populateTravelText(Node* node){ */
-/* 	node->p->travel_text[0] = 'k'; */
-/* 	if ( node->children->num > strlen(TRAVEL_CHARS) ) */
-/* 		return; */
-/* 	for (int i = 0; i < node->children->num; ++i) { */
-/* 		node->children->array[i]->travel_text[0] = TRAVEL_CHARS[i]; */
-/* 	} */
+void populateTravelText(Node* node){
+	node->p->travel_text[0] = 'k';
+	if ( node->children->num > strlen(TRAVEL_CHARS) )
+		return;
+	for (int i = 0; i < node->children->num; ++i) {
+		node->children->array[i]->travel_text[0] = TRAVEL_CHARS[i];
+	}
 
-/* } */
+}
 
 /* Recursively print children of nodes, with each child indented once from the parent */
 void writeChildrenStrings(FILE* file, Node* node, int level){
