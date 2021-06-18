@@ -84,8 +84,8 @@ struct Node {
 	struct Node* p;
 	struct Array* children;
 	struct DoublePoint pos;
-    char* text;
-    int text_len;
+	char* text;
+	int text_len;
 };
 
 struct Graph {
@@ -204,10 +204,10 @@ void doKeyDown(SDL_KeyboardEvent *event) {
 void doKeyUp(SDL_KeyboardEvent *event) {
 	if (event->repeat == 0) {
 		if ( graph.mode != Edit ){
-            if (event->keysym.sym == SDLK_o) {
+			if (event->keysym.sym == SDLK_o) {
 				makeChild(graph.selected);
 			}
-            if (event->keysym.sym == SDLK_d) {
+			if (event->keysym.sym == SDLK_d) {
 				removeNodeFromGraph(graph.selected);
 			}
 			if (event->keysym.sym == SDLK_h) {
@@ -425,7 +425,7 @@ void renderMessage(char* message, Point pos, double width, double height){
 	// create surface from string
 	SDL_Surface* surfaceMessage =
 		TTF_RenderText_Solid(FONT, message, color);
-	//                                                       ^ wrapped len
+	//      ^ wrapped len
 
 	// now you can convert it into a texture
 	SDL_Texture* Message = SDL_CreateTextureFromSurface(app.renderer, surfaceMessage);
@@ -601,7 +601,7 @@ void deleteNode(Node* node){
 	if ( node == NULL ) {
 		return;
 	}
-    /* delete each child */
+	/* delete each child */
 	for (int i=0; i<node->children->num; i++){
 		deleteNode( node->children->array[i] );
 	}
@@ -704,7 +704,7 @@ void readfile(const char* fname){
 		level = countTabs(ret);
 		/* create new child node */
 		hierarchy[level] = makeChild(hierarchy[level-1]);
-        /* copy current line to child node */
+		/* copy current line to child node */
 		strcpy(hierarchy[level]->text, ret + level);
 		hierarchy[level]->text_len = strlen(ret);
 	}
@@ -715,7 +715,7 @@ void readfile(const char* fname){
 
 int main(int argc, char *argv[]) {
 
-    const char* filename;
+	const char* filename;
 	/* set all bytes of App memory to zero */
 	memset(&app, 0, sizeof(App));
 
@@ -759,7 +759,7 @@ int main(int argc, char *argv[]) {
 	SDL_DestroyRenderer( app.renderer );
 	SDL_DestroyWindow( app.window );
 
-    //Quit SDL subsystems
-    SDL_Quit();
+	//Quit SDL subsystems
+	SDL_Quit();
 	return 0;
 }
