@@ -174,7 +174,7 @@ void initSDL() {
 	atexit(TTF_Quit); /* remember to quit SDL_ttf */
 
 	//this opens a font style and sets a size
-	FONT = TTF_OpenFont("/home/jack/drive/cs2/dtree/assets/FiraSans-Regular.ttf", FONT_SIZE);
+	FONT = TTF_OpenFont("./assets/FiraSans-Regular.ttf", FONT_SIZE);
 
 	printf("TTF_FontHeight          : %d\n",TTF_FontHeight(FONT));
 	printf("TTF_FontAscent          : %d\n",TTF_FontAscent(FONT));
