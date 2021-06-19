@@ -1,7 +1,9 @@
 // TODO
 // SDLK is software character, SCANCODE is hardware
-// - travel mode (debug prototype)
-// - add way to edit file name
+// - travel mode (better population of text)
+// 	- issue: travel_text is freed already before it gets cleared
+// - make parent visible
+// - add way to edit file name in app
 // - add, copy, paste functionality
 //
 // https://www.parallelrealities.co.uk/tutorials/#shooter
@@ -23,44 +25,15 @@
 #define SCREEN_WIDTH   1280
 #define SCREEN_HEIGHT  720
 
-static const char* TRAVEL_CHARS = "asdfghjl;";
-
-// radius and thickness of node ring
-static int RADIUS = 50;
-static int THICKNESS = 10;
-
-static double LEFT_BOUNDARY = 0.2;
-static double RIGHT_BOUNDARY = 0.8;
-
-// Spacing between layers of tree
-static double LAYER_MARGIN = 0.3;
-// Spacing between edge of screen and node
-static double SIDE_MARGIN = 0.2;
-
-static double SCALE = 1.5;
-
-static TTF_Font* FONT;
-static int FONT_SIZE = 40;
-
-// width and heigh of text boxes
-static int TEXTBOX_WIDTH_SCALE = 40;
-static int TEXTBOX_HEIGHT = 100;
-static int MAX_TEXT_LEN = 32;
-static int MAX_NUM_TRAVEL_CHARS = 2;
-
-static unsigned int BUF_SIZE = 128;
-
-enum Mode{Default, Edit, Travel};
-
-static SDL_Color EDIT_COLOR = {255, 255, 255};
-static SDL_Color TRAVEL_COLOR = {255, 0, 0};
-
 typedef struct Node Node;
 typedef struct Array Array;
 typedef struct Graph Graph;
 typedef struct Point Point;
 typedef struct DoublePoint DoublePoint;
 typedef struct App App;
+
+enum Mode{Default, Edit, Travel};
+
 struct Point {
 	int x;
 	int y;
@@ -103,6 +76,39 @@ struct Graph {
 static App app;
 static Graph graph;
 
+static const char* TRAVEL_CHARS = "asdfghjl;";
+// radius and thickness of node ring
+static int RADIUS = 50;
+static int THICKNESS = 10;
+// Boundaries for tree
+static double LEFT_BOUNDARY = 0.2;
+static double RIGHT_BOUNDARY = 0.8;
+// Spacing between layers of tree
+static double LAYER_MARGIN = 0.3;
+// Spacing between edge of screen and node
+static double SIDE_MARGIN = 0.2;
+static double SCALE = 1.5;
+// Default Font
+static TTF_Font* FONT;
+static int FONT_SIZE = 40;
+// width and heigh of text boxes
+static int TEXTBOX_WIDTH_SCALE = 40;
+static int TEXTBOX_HEIGHT = 100;
+static int MAX_TEXT_LEN = 32;
+// number of characters for travel hint text
+static int MAX_NUM_TRAVEL_CHARS = 2;
+// current idx of travel char
+static int TRAVEL_CHAR_I = 0;
+// array of all nodes to be traveled to
+static Node** TRAVEL_NODES;
+// length of TRAVEL_NODES
+static int NUM_TRAVEL_NODES;
+// buffer to store current travel hint progress
+static char* TRAVEL_CHAR_BUF;
+static unsigned int BUF_SIZE = 128;
+static SDL_Color EDIT_COLOR = {255, 255, 255};
+static SDL_Color TRAVEL_COLOR = {255, 0, 0};
+
 double clip(double num, double min, double max);
 void initSDL();
 void doKeyDown(SDL_KeyboardEvent *event);
@@ -125,6 +131,7 @@ void writeChildrenStrings(FILE* file, Node* node, int level);
 void readfile(const char* filename);
 void deleteNode(Node* node);
 void removeNodeFromGraph(Node* node);
+void clearTravelText();
 void populateTravelText(Node* node);
 
 double clip(double num, double min, double max){
@@ -202,6 +209,21 @@ void initSDL() {
 	}
 }
 
+void switch2Default(){
+	printf("switching to default\n");
+	if ( graph.mode == Travel ){
+		free (TRAVEL_NODES);
+		TRAVEL_NODES = NULL;
+		NUM_TRAVEL_NODES = 0;
+		TRAVEL_CHAR_I = 0;
+
+		if ( TRAVEL_CHAR_BUF ) free(TRAVEL_CHAR_BUF);
+		TRAVEL_CHAR_BUF = calloc(MAX_NUM_TRAVEL_CHARS, sizeof(char));
+	}
+	graph.mode = Default;
+	printf("switched to default %p\n", TRAVEL_NODES);
+}
+
 void doKeyDown(SDL_KeyboardEvent *event) {
 	if (event->repeat == 0) {
 		if (event->keysym.sym == SDLK_q) {
@@ -235,21 +257,18 @@ void doKeyUp(SDL_KeyboardEvent *event) {
 		}
 
 		if (event->keysym.sym == SDLK_ESCAPE){
-			if ( graph.mode == Travel )
-				graph.mode = Default;
-			if ( graph.mode == Edit ){
-				graph.mode = Default;
-				SDL_StopTextInput();
-			}
+			switch2Default();
 		}
 
 		if (event->keysym.sym == SDLK_t) {
-			if ( graph.mode != Travel ){
+			if ( graph.mode == Edit ){}
+			else if ( graph.mode != Travel ){
 				graph.mode = Travel;
 				populateTravelText(graph.selected);
+				printf("end\n");
 			}
 			else{
-				graph.mode = Default;
+				switch2Default();
 			}
 		}
 
@@ -262,8 +281,6 @@ void doKeyUp(SDL_KeyboardEvent *event) {
 		if (event->keysym.sym == SDLK_e){
 			if ( graph.mode != Edit ){
 				graph.mode = Edit;
-				printf("SDL_StartTextInput()\n");
-				SDL_StartTextInput();
 			}
 		}
 		if (event->keysym.sym == SDLK_MINUS){
@@ -293,6 +310,28 @@ void eventHandler(SDL_Event *event) {
 			}
 			if (graph.mode == Travel){
 				// go to node specified by travel chars
+				printf("handling travel input: %d/%d\n", TRAVEL_CHAR_I, MAX_NUM_TRAVEL_CHARS);
+				if ( TRAVEL_CHAR_I < MAX_NUM_TRAVEL_CHARS ) {
+					TRAVEL_CHAR_BUF[TRAVEL_CHAR_I++] = event->edit.text[0];
+					// check if any nodes travel text matches current input
+					for (int i = 0; i < NUM_TRAVEL_NODES; ++i) {
+						if ( strcmp(TRAVEL_CHAR_BUF, TRAVEL_NODES[i]->travel_text) == 0 ){
+							graph.selected = TRAVEL_NODES[i];
+							// reset travel text
+							printf("freeing travel chars\n");
+							if ( TRAVEL_CHAR_BUF ) free(TRAVEL_CHAR_BUF);
+							printf("freed travel chars\n");
+							TRAVEL_CHAR_BUF = calloc(MAX_NUM_TRAVEL_CHARS, sizeof(char));
+							TRAVEL_CHAR_I = 0;
+							populateTravelText(graph.selected);
+							printf("changing nodes\n");
+						}
+
+					}
+				}
+				printf("handled travel input\n");
+
+
 			}
 			break;
 
@@ -501,17 +540,20 @@ void update_pos_children(Node* node, double leftmost_bound, double rightmost_bou
 
 void compute_root_bounds_from_selected_and_update_pos_children(Node* node, double leftmost_bound, double rightmost_bound, double level){
 
+	printf("crb start\n");
 	/* If we reached the root, compute all child bounds relative to the root bounds */
 	if (node == graph.root){
 		update_pos_children(node, leftmost_bound, rightmost_bound, level);
 		return;
 	}
+	printf("root not reached\n");
 
 	/* we step through each sibling of the current node,
 	giving each child the same size as the current node */
 	double step_size = rightmost_bound - leftmost_bound;
 	int child_idx = 0;
 
+	printf("computing node children\n");
 	/* compute idx of child relative to parent */
 	for (int i = 0; i < node->p->children->num; i++) {
 		if (node->p->children->array[i] == node){
@@ -519,11 +561,13 @@ void compute_root_bounds_from_selected_and_update_pos_children(Node* node, doubl
 			break;
 		}
 	}
+	printf("computed node children\n");
 	/* compute the left and right boundaries of the parent node relative
 	to the location of the child */
 	double parent_left_bound = leftmost_bound - (step_size * child_idx);
 	double parent_right_bound = rightmost_bound + (step_size * (node->p->children->num - child_idx-1));
 	compute_root_bounds_from_selected_and_update_pos_children(node->p, parent_left_bound, parent_right_bound, level - LAYER_MARGIN);
+	printf("crb end\n");
 }
 
 /* Debug function, used to print locations of all nodes in indented hierarchy */
@@ -662,14 +706,50 @@ void makeGraph(){
 	graph.mode = Default;
 }
 
-void populateTravelText(Node* node){
-	node->p->travel_text[0] = 'k';
-	if ( node->children->num > strlen(TRAVEL_CHARS) )
+
+void clearTravelText() {
+	printf("start clearTravelText()\n");
+	// return if already freed
+	if ( TRAVEL_NODES == NULL || NUM_TRAVEL_NODES == 0 )
 		return;
+	printf("travel nodes %p, num %d\n", TRAVEL_NODES, NUM_TRAVEL_NODES);
+	// Clear all travel text in each travel node
+	for (int i = 0; i < NUM_TRAVEL_NODES; ++i) {
+		for (int j = 0; j < MAX_NUM_TRAVEL_CHARS; j++) {
+			printf("node %d (%p)\n", i, TRAVEL_NODES[i]);
+			printf("travel_text %p\n", TRAVEL_NODES[i]->travel_text);
+			if (TRAVEL_NODES[i]->travel_text)
+				TRAVEL_NODES[i]->travel_text[j] = '\0';
+			printf("accessed travel text\n");
+		}
+	}
+	// Clear travel node array
+	printf("freeing TRAVEL_NODES\n");
+	if ( TRAVEL_NODES )
+		free ( TRAVEL_NODES );
+	TRAVEL_NODES = NULL;
+	NUM_TRAVEL_NODES = 0;
+	printf("end clearTravelText()\n");
+}
+
+void populateTravelText(Node* node){
+	printf("populate start\n");
+	clearTravelText();
+	node->p->travel_text[0] = 'k';
+	// cancel if too many children
+	if ( node->children->num > strlen(TRAVEL_CHARS) ){
+		TRAVEL_NODES = NULL;
+		return;
+	}
+	NUM_TRAVEL_NODES = node->children->num + 1;
+	TRAVEL_NODES = (Node**) calloc(NUM_TRAVEL_NODES, sizeof(Node**));
+	TRAVEL_NODES[0] = node->p;
 	for (int i = 0; i < node->children->num; ++i) {
 		node->children->array[i]->travel_text[0] = TRAVEL_CHARS[i];
+		printf("travel txt: %p\n", node->children->array[i]->travel_text);
+		TRAVEL_NODES[i+1] = node->children->array[i];
 	}
-
+	printf("populate end\n");
 }
 
 /* Recursively print children of nodes, with each child indented once from the parent */
@@ -761,6 +841,8 @@ int main(int argc, char *argv[]) {
 		filename = argv[1];
 		readfile(filename);
 	}
+
+	TRAVEL_CHAR_BUF = calloc(MAX_NUM_TRAVEL_CHARS + 1, sizeof(char));
 	/* gracefully close windows on exit of program */
 	atexit(SDL_Quit);
 
@@ -776,15 +858,22 @@ int main(int argc, char *argv[]) {
 
 		/* Handle input before rendering */
 		eventHandler(&e);
+		printf("event handler done\n");
 
+		printf("prepare scene start\n");
 		prepareScene();
+		printf("prepare scene end\n");
 
+		printf("present scene start\n");
 		presentScene();
+		printf("present scene end\n");
 
 		SDL_Delay(0);
 	}
 	write("test.txt");
 
+	if (TRAVEL_CHAR_BUF)
+		free(TRAVEL_CHAR_BUF);
 	/* delete nodes recursively, starting from root */
 	deleteNode(graph.root);
 
