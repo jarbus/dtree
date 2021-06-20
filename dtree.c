@@ -1,10 +1,13 @@
 // TODO
-// SDLK is software character, SCANCODE is hardware
-// - travel mode (better population of text)
-// 	- issue: travel_text is freed already before it gets cleared
+// - travel mode
+// 	- better population of text
+// 	- issue: handle invalid characters properly
+// 	- qol: highlight matching characters as you fill them in
 // - make parent visible
 // - add way to edit file name in app
 // - add, copy, paste functionality
+// NOTE:
+// SDLK is software character, SCANCODE is hardware
 //
 // https://www.parallelrealities.co.uk/tutorials/#shooter
 // https://lazyfoo.net/tutorials/SDL/32_text_input_and_clipboard_handling/index.php
@@ -105,9 +108,11 @@ static Node** TRAVEL_NODES;
 static int NUM_TRAVEL_NODES;
 // buffer to store current travel hint progress
 static char* TRAVEL_CHAR_BUF;
+static char* FILENAME;
 static unsigned int BUF_SIZE = 128;
 static SDL_Color EDIT_COLOR = {255, 255, 255};
 static SDL_Color TRAVEL_COLOR = {255, 0, 0};
+
 
 double clip(double num, double min, double max);
 void initSDL();
@@ -126,13 +131,25 @@ void drawNode(Node* node);
 void compute_root_bounds_from_selected_and_update_pos_children(Node* node, double leftmost_bound, double rightmost_bound, double level);
 void update_pos_children(Node* node, double leftmost_bound, double rightmost_bound, double level);
 void recursively_print_positions(Node* node, int level);
-void write(char* filename);
+void write();
 void writeChildrenStrings(FILE* file, Node* node, int level);
-void readfile(const char* filename);
+void readfile();
 void deleteNode(Node* node);
 void removeNodeFromGraph(Node* node);
 void clearTravelText();
 void populateTravelText(Node* node);
+char* enum2Name(enum Mode mode);
+
+char* enum2Name(enum Mode mode){
+	if ( mode == Default )
+		return "DEFAULT";
+	if ( mode == Edit )
+		return "EDIT";
+	if ( mode == Travel )
+		return "TRAVEL";
+	return NULL;
+}
+
 
 double clip(double num, double min, double max){
 	if ( num < min )
@@ -216,7 +233,6 @@ void switch2Default(){
 		TRAVEL_NODES = NULL;
 		NUM_TRAVEL_NODES = 0;
 		TRAVEL_CHAR_I = 0;
-
 		if ( TRAVEL_CHAR_BUF ) free(TRAVEL_CHAR_BUF);
 		TRAVEL_CHAR_BUF = calloc(MAX_NUM_TRAVEL_CHARS, sizeof(char));
 	}
@@ -227,6 +243,7 @@ void switch2Default(){
 void doKeyDown(SDL_KeyboardEvent *event) {
 	if (event->repeat == 0) {
 		if (event->keysym.sym == SDLK_q) {
+			printf("quitting...\n");
 			app.quit = 1;
 		}
 	}
@@ -264,7 +281,6 @@ void doKeyUp(SDL_KeyboardEvent *event) {
 			else if ( graph.mode != Travel ){
 				graph.mode = Travel;
 				populateTravelText(graph.selected);
-				printf("end\n");
 			}
 			else{
 				switch2Default();
@@ -600,7 +616,21 @@ void prepareScene() {
 	if ( DEBUG )
 		recursively_print_positions(graph.root, 0);
 
+	// Draw Graph
 	drawNode(graph.root);
+
+	// Draw filename
+	Point filename_pos;
+	filename_pos.x = (int) ((0.0) * app.window_size.x);
+	filename_pos.y = (int) ((0.9) * app.window_size.y);
+	renderMessage(FILENAME, filename_pos, strlen(FILENAME) * TEXTBOX_WIDTH_SCALE, TEXTBOX_HEIGHT, EDIT_COLOR);
+
+	// Draw mode
+	Point mode_text_pos;
+	mode_text_pos.x = (int) ((0.0) * app.window_size.x);
+	mode_text_pos.y = (int) ((0.0) * app.window_size.y);
+	printf("rendering %s\n", enum2Name(graph.mode));
+	renderMessage(enum2Name(graph.mode), mode_text_pos, strlen(enum2Name(graph.mode)) * TEXTBOX_WIDTH_SCALE, TEXTBOX_HEIGHT, EDIT_COLOR);
 }
 
 /* actually renders the screen */
@@ -733,6 +763,8 @@ void clearTravelText() {
 }
 
 void populateTravelText(Node* node){
+	// Current method: add parent and children
+	// New method: add every node that is visible
 	printf("populate start\n");
 	clearTravelText();
 	node->p->travel_text[0] = 'k';
@@ -743,7 +775,9 @@ void populateTravelText(Node* node){
 	}
 	NUM_TRAVEL_NODES = node->children->num + 1;
 	TRAVEL_NODES = (Node**) calloc(NUM_TRAVEL_NODES, sizeof(Node**));
+	// Add parent
 	TRAVEL_NODES[0] = node->p;
+	// Add children
 	for (int i = 0; i < node->children->num; ++i) {
 		node->children->array[i]->travel_text[0] = TRAVEL_CHARS[i];
 		printf("travel txt: %p\n", node->children->array[i]->travel_text);
@@ -763,9 +797,12 @@ void writeChildrenStrings(FILE* file, Node* node, int level){
 }
 
 
-void write(char* filename){
-	FILE* output = fopen(filename, "w");
+void write(){
+	printf("write start\n");
+ 	FILE* output = fopen(FILENAME, "w");
+	printf("write open done\n");
 	writeChildrenStrings(output, graph.root, 0);
+	printf("write children done\n");
 	fclose(output);
 }
 
@@ -789,9 +826,8 @@ void endAtNewline(char* string, int textlen){
 	}
 }
 
-void readfile(const char* fname){
-
-	FILE* fp = fopen(fname, "r");
+void readfile(){
+ 	FILE* fp = fopen(FILENAME, "r");
 	/* buffer to store lines */
 	char* buf = calloc(BUF_SIZE, sizeof(char));
 	/* load first line of file */
@@ -827,8 +863,6 @@ void readfile(const char* fname){
 }
 
 int main(int argc, char *argv[]) {
-
-	const char* filename;
 	/* set all bytes of App memory to zero */
 	memset(&app, 0, sizeof(App));
 
@@ -838,8 +872,11 @@ int main(int argc, char *argv[]) {
 	makeGraph();
 
 	if ( argc > 1 ){
-		filename = argv[1];
-		readfile(filename);
+		FILENAME = argv[1];
+		readfile();
+	}
+	else{
+		FILENAME = "test.txt";
 	}
 
 	TRAVEL_CHAR_BUF = calloc(MAX_NUM_TRAVEL_CHARS + 1, sizeof(char));
@@ -870,7 +907,9 @@ int main(int argc, char *argv[]) {
 
 		SDL_Delay(0);
 	}
-	write("test.txt");
+	printf("saving...\n");
+	write();
+	printf("saved\n");
 
 	if (TRAVEL_CHAR_BUF)
 		free(TRAVEL_CHAR_BUF);
