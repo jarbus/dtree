@@ -12,8 +12,8 @@
 // https://www.parallelrealities.co.uk/tutorials/#shooter
 // https://lazyfoo.net/tutorials/SDL/32_text_input_and_clipboard_handling/index.php
 // marks: `s for structs
-// 		  `f for functions
-// 		  `m for main function
+//		  `f for functions
+//		  `m for main function
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_ttf.h>
@@ -64,8 +64,8 @@ struct Node {
 	struct Node* p;
 	struct Array* children;
 	struct DoublePoint pos;
-    char* text;
-    int text_len;
+	char* text;
+	int text_len;
 	char* travel_text;
 };
 
@@ -207,7 +207,7 @@ void initSDL() {
 	atexit(TTF_Quit); /* remember to quit SDL_ttf */
 
 	//this opens a font style and sets a size
-	FONT = TTF_OpenFont("/home/jack/drive/cs2/dtree/assets/FiraSans-Regular.ttf", FONT_SIZE);
+	FONT = TTF_OpenFont("./assets/FiraSans-Regular.ttf", FONT_SIZE);
 
 	printf("TTF_FontHeight          : %d\n",TTF_FontHeight(FONT));
 	printf("TTF_FontAscent          : %d\n",TTF_FontAscent(FONT));
@@ -220,7 +220,7 @@ void initSDL() {
 		str="(null)";
 	printf("TTF_FontFaceFamilyName  : \"%s\"\n",str);
 
- 	if(FONT == NULL) {
+	if(FONT == NULL) {
 		printf("TTF_OpenFont: %s\n", TTF_GetError());
 		// handle error
 	}
@@ -252,10 +252,10 @@ void doKeyDown(SDL_KeyboardEvent *event) {
 void doKeyUp(SDL_KeyboardEvent *event) {
 	if (event->repeat == 0) {
 		if ( graph.mode == Default ){
-            if (event->keysym.sym == SDLK_o) {
+			if (event->keysym.sym == SDLK_o) {
 				makeChild(graph.selected);
 			}
-            if (event->keysym.sym == SDLK_d) {
+			if (event->keysym.sym == SDLK_d) {
 				removeNodeFromGraph(graph.selected);
 			}
 			if (event->keysym.sym == SDLK_h) {
@@ -272,7 +272,6 @@ void doKeyUp(SDL_KeyboardEvent *event) {
 				graph.selected = graph.selected->p;
 			}
 		}
-
 		if (event->keysym.sym == SDLK_ESCAPE){
 			switch2Default();
 		}
@@ -501,6 +500,7 @@ void renderMessage(char* message, Point pos, double width, double height, SDL_Co
 	// create surface from string
 	SDL_Surface* surfaceMessage =
 		TTF_RenderText_Solid(FONT, message, color);
+	//      ^ wrapped len
 
 	// now you can convert it into a texture
 	SDL_Texture* Message = SDL_CreateTextureFromSurface(app.renderer, surfaceMessage);
@@ -531,7 +531,7 @@ void update_pos_children(Node* node, double leftmost_bound, double rightmost_bou
 		printf("update node position to %lf %lf\n", node->pos.x, node->pos.y);
 
 	/* if ( node == graph.selected ) */
-	/* 	printf("selected: %lf %lf\n", leftmost_bound, rightmost_bound); */
+	/*	printf("selected: %lf %lf\n", leftmost_bound, rightmost_bound); */
 
 	/* dont update children if no children */
 	if ( node->children->num == 0)
@@ -641,9 +641,9 @@ void presentScene() {
 Array* initArray(size_t initialSize) {
 	Array *a;
 	a = calloc(1, sizeof(Array));
-  	a->array = calloc(initialSize, sizeof(void*));
-  	a->num = 0;
-  	a->size = initialSize;
+	a->array = calloc(initialSize, sizeof(void*));
+	a->num = 0;
+	a->size = initialSize;
 	return a;
 }
 
@@ -699,7 +699,7 @@ void deleteNode(Node* node){
 	if ( node == NULL ) {
 		return;
 	}
-    /* delete each child */
+	/* delete each child */
 	for (int i=0; i<node->children->num; i++){
 		deleteNode( node->children->array[i] );
 	}
@@ -819,19 +819,18 @@ unsigned int countTabs(char* string){
 
 void endAtNewline(char* string, int textlen){
 	for (int i = 0; i < textlen; ++i) {
- 		if (string[i] == '\n') {
+		if (string[i] == '\n') {
 			string[i] = '\0';
 			break;
- 		}
+		}
 	}
 }
 
 void readfile(){
-
  	FILE* fp = fopen(FILENAME, "r");
 	/* buffer to store lines */
 	char* buf = calloc(BUF_SIZE, sizeof(char));
-  	/* load first line of file */
+	/* load first line of file */
 	char* ret = fgets(buf, BUF_SIZE, fp);
 	/* keep references to all nodes that can have children added,
 	 * one per each level */
@@ -854,7 +853,7 @@ void readfile(){
 		level = countTabs(ret);
 		/* create new child node */
 		hierarchy[level] = makeChild(hierarchy[level-1]);
-        /* copy current line to child node */
+		/* copy current line to child node */
 		strcpy(hierarchy[level]->text, ret + level);
 		hierarchy[level]->text_len = strlen(ret);
 	}
@@ -864,7 +863,6 @@ void readfile(){
 }
 
 int main(int argc, char *argv[]) {
-
 	/* set all bytes of App memory to zero */
 	memset(&app, 0, sizeof(App));
 
@@ -922,7 +920,7 @@ int main(int argc, char *argv[]) {
 	SDL_DestroyRenderer( app.renderer );
 	SDL_DestroyWindow( app.window );
 
-    //Quit SDL subsystems
-    SDL_Quit();
+	//Quit SDL subsystems
+	SDL_Quit();
 	return 0;
 }
