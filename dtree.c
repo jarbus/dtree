@@ -73,11 +73,11 @@ struct Graph {
 	struct Node* root;
 	int num_nodes;
 	Node* selected;
-	enum Mode mode;
 };
 
 static App app;
 static Graph graph;
+static enum Mode mode = Default;
 
 static const char* TRAVEL_CHARS = "asdfghjl;";
 // radius and thickness of node ring
@@ -138,9 +138,9 @@ void deleteNode(Node* node);
 void removeNodeFromGraph(Node* node);
 void clearTravelText();
 void populateTravelText(Node* node);
-char* enum2Name(enum Mode mode);
+char* getModeName();
 
-char* enum2Name(enum Mode mode){
+char* getModeName(){
 	if ( mode == Default )
 		return "DEFAULT";
 	if ( mode == Edit )
@@ -228,7 +228,7 @@ void initSDL() {
 
 void switch2Default(){
 	printf("switching to default\n");
-	if ( graph.mode == Travel ){
+	if ( mode == Travel ){
 		free (TRAVEL_NODES);
 		TRAVEL_NODES = NULL;
 		NUM_TRAVEL_NODES = 0;
@@ -236,7 +236,7 @@ void switch2Default(){
 		if ( TRAVEL_CHAR_BUF ) free(TRAVEL_CHAR_BUF);
 		TRAVEL_CHAR_BUF = calloc(MAX_NUM_TRAVEL_CHARS, sizeof(char));
 	}
-	graph.mode = Default;
+	mode = Default;
 	printf("switched to default %p\n", TRAVEL_NODES);
 }
 
@@ -251,7 +251,7 @@ void doKeyDown(SDL_KeyboardEvent *event) {
 
 void doKeyUp(SDL_KeyboardEvent *event) {
 	if (event->repeat == 0) {
-		if ( graph.mode == Default ){
+		if ( mode == Default ){
 			if (event->keysym.sym == SDLK_o) {
 				makeChild(graph.selected);
 			}
@@ -277,9 +277,9 @@ void doKeyUp(SDL_KeyboardEvent *event) {
 		}
 
 		if (event->keysym.sym == SDLK_t) {
-			if ( graph.mode == Edit ){}
-			else if ( graph.mode != Travel ){
-				graph.mode = Travel;
+			if ( mode == Edit ){}
+			else if ( mode != Travel ){
+				mode = Travel;
 				populateTravelText(graph.selected);
 			}
 			else{
@@ -294,8 +294,8 @@ void doKeyUp(SDL_KeyboardEvent *event) {
 			}
 		}
 		if (event->keysym.sym == SDLK_e){
-			if ( graph.mode != Edit ){
-				graph.mode = Edit;
+			if ( mode != Edit ){
+				mode = Edit;
 			}
 		}
 		if (event->keysym.sym == SDLK_MINUS){
@@ -319,11 +319,11 @@ void eventHandler(SDL_Event *event) {
 	switch (event->type)
 	{
 		case SDL_TEXTINPUT:
-			if (graph.mode == Edit){
+			if (mode == Edit){
 				if ( graph.selected->text_len < MAX_TEXT_LEN )
 					graph.selected->text[graph.selected->text_len++] = event->edit.text[0];
 			}
-			if (graph.mode == Travel){
+			if (mode == Travel){
 				// go to node specified by travel chars
 				printf("handling travel input: %d/%d\n", TRAVEL_CHAR_I, MAX_NUM_TRAVEL_CHARS);
 				if ( TRAVEL_CHAR_I < MAX_NUM_TRAVEL_CHARS ) {
@@ -466,7 +466,7 @@ void drawNode(Node* node) {
 	/* render node text */
 	renderMessage(node->text, message_pos, TEXTBOX_WIDTH_SCALE*node->text_len, TEXTBOX_HEIGHT, EDIT_COLOR);
 	/* render travel text */
-	if ( graph.mode == Travel ){
+	if ( mode == Travel ){
 		if (strlen(node->travel_text) > 0){
 			// position char in center of node
 			message_pos.x = (int) ((node->pos.x) * app.window_size.x)  - (int)((TEXTBOX_WIDTH_SCALE) / 2) - RADIUS;
@@ -629,8 +629,8 @@ void prepareScene() {
 	Point mode_text_pos;
 	mode_text_pos.x = (int) ((0.0) * app.window_size.x);
 	mode_text_pos.y = (int) ((0.0) * app.window_size.y);
-	printf("rendering %s\n", enum2Name(graph.mode));
-	renderMessage(enum2Name(graph.mode), mode_text_pos, strlen(enum2Name(graph.mode)) * TEXTBOX_WIDTH_SCALE, TEXTBOX_HEIGHT, EDIT_COLOR);
+	printf("rendering %s\n", getModeName());
+	renderMessage(getModeName(), mode_text_pos, strlen(getModeName()) * TEXTBOX_WIDTH_SCALE, TEXTBOX_HEIGHT, EDIT_COLOR);
 }
 
 /* actually renders the screen */
@@ -733,7 +733,7 @@ void makeGraph(){
 	graph.num_nodes = 0;
 	graph.selected = graph.root;
 	graph.root->p = graph.root;
-	graph.mode = Default;
+	mode = Default;
 }
 
 
