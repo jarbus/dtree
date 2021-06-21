@@ -243,77 +243,92 @@ void switch2Default(){
 }
 
 void doKeyDown(SDL_KeyboardEvent *event) {
-	if (event->repeat == 0) {
-		if (event->keysym.sym == SDLK_q) {
-			printf("quitting...\n");
-			app.quit = 1;
-		}
+	if (event->repeat != 0) {
+		return;
+	}
+	if (event->keysym.sym == SDLK_q) {
+		printf("quitting...\n");
+		app.quit = 1;
 	}
 }
 
 void doKeyUp(SDL_KeyboardEvent *event) {
-	if (event->repeat == 0) {
-		if ( mode == Default ){
-			if (event->keysym.sym == SDLK_o) {
-				makeChild(graph.selected);
-			}
-			if (event->keysym.sym == SDLK_d) {
-				removeNodeFromGraph(graph.selected);
-			}
-			if (event->keysym.sym == SDLK_h) {
-				if ( graph.selected->children->num >= 1 ){
-					graph.selected = graph.selected->children->array[0];
-				}
-			}
-			if (event->keysym.sym == SDLK_l) {
-				if ( graph.selected->children->num >= 1 ){
-					graph.selected = graph.selected->children->array[graph.selected->children->num-1];
-				}
-			}
-			if (event->keysym.sym == SDLK_k) {
-				graph.selected = graph.selected->p;
-			}
-		}
-		if (event->keysym.sym == SDLK_ESCAPE){
+	if (event->repeat != 0) {
+		return;
+	}
+	// up-front key-checks that apply to any mode
+	switch(event->keysym.sym) {
+		case SDLK_ESCAPE:
 			switch2Default();
-		}
-
-		if (event->keysym.sym == SDLK_t) {
-			if ( mode == Edit ){}
-			else if ( mode != Travel ){
-				mode = Travel;
-				populateTravelText(graph.selected);
-			}
-			else{
-				switch2Default();
-			}
-		}
-
-		if (event->keysym.sym == SDLK_BACKSPACE){
+			return;
+		case SDLK_BACKSPACE:
 			if ( graph.selected->text_len > 0 ){
 				graph.selected->text_len--;
 				graph.selected->text[graph.selected->text_len] = '\0';
 			}
-		}
-		if (event->keysym.sym == SDLK_e){
-			if ( mode != Edit ){
-				mode = Edit;
-			}
-		}
-		if (event->keysym.sym == SDLK_MINUS){
+			return;
+		case SDLK_MINUS:
 			LAYER_MARGIN /= SCALE;
 			RADIUS = (int) RADIUS / SCALE;
 			THICKNESS = (int) THICKNESS / SCALE;
 			LEFT_BOUNDARY -= SIDE_MARGIN * SCALE;
 			RIGHT_BOUNDARY -= SCALE;
-		}
-		if (event->keysym.sym == SDLK_EQUALS){
+			return;
+		case SDLK_EQUALS:
 			LAYER_MARGIN *= SCALE;
 			RADIUS = (int) RADIUS * SCALE;
 			THICKNESS = (int) THICKNESS * SCALE;
 			LEFT_BOUNDARY += SCALE;
 			RIGHT_BOUNDARY += SCALE;
-		}
+			return;
+	}
+
+	// mode-specific key-bindings
+	switch(mode) {
+	case Default:
+	switch(event->keysym.sym) {
+		case SDLK_o:
+			makeChild(graph.selected);
+			return;
+		case SDLK_d:
+			removeNodeFromGraph(graph.selected);
+			return;
+		case SDLK_h:
+			if ( graph.selected->children->num >= 1 ){
+				graph.selected = graph.selected->children->array[0];
+			}
+			return;
+		case SDLK_l:
+			if ( graph.selected->children->num >= 1 ){
+				graph.selected = graph.selected->children->array[graph.selected->children->num-1];
+			}
+			return;
+		case SDLK_k:
+			graph.selected = graph.selected->p;
+			return;
+		case SDLK_t:
+			mode = Travel;
+			populateTravelText(graph.selected);
+			return;
+		case SDLK_e:
+			mode = Edit;
+			return;
+	}
+	break; // end of Default bindings
+	case Travel:
+	switch(event->keysym.sym) {
+		case SDLK_t:
+			switch2Default();
+			return;
+		case SDLK_e:
+			switch2Default(); // exiting travel mode requires freeing some memory
+			mode = Edit;
+			return;
+	}
+	break; // end of Travel bindings
+	case Edit: {
+		return; // edit-mode specific key-binds don't really exist
+	}
 	}
 }
 
