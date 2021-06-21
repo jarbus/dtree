@@ -23,7 +23,10 @@
 #include <stdbool.h>
 #include <string.h>
 
+// as per https://stackoverflow.com/questions/1644868/define-macro-for-debug-printing-in-c
 #define DEBUG 0
+#define debug_print(...) \
+		do { if (DEBUG) fprintf(stderr, __VA_ARGS__); } while (0)
 
 #define SCREEN_WIDTH   1280
 #define SCREEN_HEIGHT  720
@@ -73,11 +76,11 @@ struct Graph {
 	struct Node* root;
 	int num_nodes;
 	Node* selected;
-	enum Mode mode;
 };
 
 static App app;
 static Graph graph;
+static enum Mode mode = Default;
 
 static const char* TRAVEL_CHARS = "asdfghjl;";
 // radius and thickness of node ring
@@ -138,16 +141,15 @@ void deleteNode(Node* node);
 void removeNodeFromGraph(Node* node);
 void clearTravelText();
 void populateTravelText(Node* node);
-char* enum2Name(enum Mode mode);
+char* getModeName();
 
-char* enum2Name(enum Mode mode){
-	if ( mode == Default )
-		return "DEFAULT";
-	if ( mode == Edit )
-		return "EDIT";
-	if ( mode == Travel )
-		return "TRAVEL";
-	return NULL;
+char* getModeName(){
+	switch(mode) {
+		case Default: return "DEFAULT";
+		case Edit: return "EDIT";
+		case Travel: return "TRAVEL";
+		default: return NULL;
+	}
 }
 
 
@@ -166,12 +168,12 @@ void initSDL() {
 
 	windowFlags = SDL_WINDOW_RESIZABLE;
 
-	printf("initing video\n");
+	debug_print("initing video\n");
 	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
 		printf("Couldn't initialize SDL: %s\n", SDL_GetError());
 		exit(1);
 	}
-	printf("inited video\n");
+	debug_print("inited video\n");
 
 	app.window = SDL_CreateWindow("dtree", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, windowFlags);
 
@@ -183,9 +185,9 @@ void initSDL() {
 
 	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
 
-	printf("creating renderer\n");
+	debug_print("creating renderer\n");
 	app.renderer = SDL_CreateRenderer(app.window, -1, rendererFlags);
-	printf("created renderer\n");
+	debug_print("created renderer\n");
 
 	if (!app.renderer) {
 		printf("Failed to create renderer: %s\n", SDL_GetError());
@@ -209,16 +211,16 @@ void initSDL() {
 	//this opens a font style and sets a size
 	FONT = TTF_OpenFont("./assets/FiraSans-Regular.ttf", FONT_SIZE);
 
-	printf("TTF_FontHeight          : %d\n",TTF_FontHeight(FONT));
-	printf("TTF_FontAscent          : %d\n",TTF_FontAscent(FONT));
-	printf("TTF_FontDescent         : %d\n",TTF_FontDescent(FONT));
-	printf("TTF_FontLineSkip        : %d\n",TTF_FontLineSkip(FONT));
-	printf("TTF_FontFaceIsFixedWidth: %d\n",TTF_FontFaceIsFixedWidth(FONT));
+	debug_print("TTF_FontHeight          : %d\n",TTF_FontHeight(FONT));
+	debug_print("TTF_FontAscent          : %d\n",TTF_FontAscent(FONT));
+	debug_print("TTF_FontDescent         : %d\n",TTF_FontDescent(FONT));
+	debug_print("TTF_FontLineSkip        : %d\n",TTF_FontLineSkip(FONT));
+	debug_print("TTF_FontFaceIsFixedWidth: %d\n",TTF_FontFaceIsFixedWidth(FONT));
 
 	char *str=TTF_FontFaceFamilyName(FONT);
 	if(!str)
 		str="(null)";
-	printf("TTF_FontFaceFamilyName  : \"%s\"\n",str);
+	debug_print("TTF_FontFaceFamilyName  : \"%s\"\n",str);
 
 	if(FONT == NULL) {
 		printf("TTF_OpenFont: %s\n", TTF_GetError());
@@ -227,8 +229,8 @@ void initSDL() {
 }
 
 void switch2Default(){
-	printf("switching to default\n");
-	if ( graph.mode == Travel ){
+	debug_print("switching to default\n");
+	if ( mode == Travel ){
 		free (TRAVEL_NODES);
 		TRAVEL_NODES = NULL;
 		NUM_TRAVEL_NODES = 0;
@@ -236,82 +238,97 @@ void switch2Default(){
 		if ( TRAVEL_CHAR_BUF ) free(TRAVEL_CHAR_BUF);
 		TRAVEL_CHAR_BUF = calloc(MAX_NUM_TRAVEL_CHARS, sizeof(char));
 	}
-	graph.mode = Default;
-	printf("switched to default %p\n", TRAVEL_NODES);
+	mode = Default;
+	debug_print("switched to default %p\n", TRAVEL_NODES);
 }
 
 void doKeyDown(SDL_KeyboardEvent *event) {
-	if (event->repeat == 0) {
-		if (event->keysym.sym == SDLK_q) {
-			printf("quitting...\n");
-			app.quit = 1;
-		}
+	if (event->repeat != 0) {
+		return;
+	}
+	if (event->keysym.sym == SDLK_q) {
+		printf("quitting...\n");
+		app.quit = 1;
 	}
 }
 
 void doKeyUp(SDL_KeyboardEvent *event) {
-	if (event->repeat == 0) {
-		if ( graph.mode == Default ){
-			if (event->keysym.sym == SDLK_o) {
-				makeChild(graph.selected);
-			}
-			if (event->keysym.sym == SDLK_d) {
-				removeNodeFromGraph(graph.selected);
-			}
-			if (event->keysym.sym == SDLK_h) {
-				if ( graph.selected->children->num >= 1 ){
-					graph.selected = graph.selected->children->array[0];
-				}
-			}
-			if (event->keysym.sym == SDLK_l) {
-				if ( graph.selected->children->num >= 1 ){
-					graph.selected = graph.selected->children->array[graph.selected->children->num-1];
-				}
-			}
-			if (event->keysym.sym == SDLK_k) {
-				graph.selected = graph.selected->p;
-			}
-		}
-		if (event->keysym.sym == SDLK_ESCAPE){
+	if (event->repeat != 0) {
+		return;
+	}
+	// up-front key-checks that apply to any mode
+	switch(event->keysym.sym) {
+		case SDLK_ESCAPE:
 			switch2Default();
-		}
-
-		if (event->keysym.sym == SDLK_t) {
-			if ( graph.mode == Edit ){}
-			else if ( graph.mode != Travel ){
-				graph.mode = Travel;
-				populateTravelText(graph.selected);
-			}
-			else{
-				switch2Default();
-			}
-		}
-
-		if (event->keysym.sym == SDLK_BACKSPACE){
+			return;
+		case SDLK_BACKSPACE:
 			if ( graph.selected->text_len > 0 ){
 				graph.selected->text_len--;
 				graph.selected->text[graph.selected->text_len] = '\0';
 			}
-		}
-		if (event->keysym.sym == SDLK_e){
-			if ( graph.mode != Edit ){
-				graph.mode = Edit;
-			}
-		}
-		if (event->keysym.sym == SDLK_MINUS){
+			return;
+		case SDLK_MINUS:
 			LAYER_MARGIN /= SCALE;
 			RADIUS = (int) RADIUS / SCALE;
 			THICKNESS = (int) THICKNESS / SCALE;
 			LEFT_BOUNDARY -= SIDE_MARGIN * SCALE;
 			RIGHT_BOUNDARY -= SCALE;
-		}
-		if (event->keysym.sym == SDLK_EQUALS){
+			return;
+		case SDLK_EQUALS:
 			LAYER_MARGIN *= SCALE;
 			RADIUS = (int) RADIUS * SCALE;
 			THICKNESS = (int) THICKNESS * SCALE;
 			LEFT_BOUNDARY += SCALE;
 			RIGHT_BOUNDARY += SCALE;
-		}
+			return;
+	}
+
+	// mode-specific key-bindings
+	switch(mode) {
+	case Default:
+	switch(event->keysym.sym) {
+		case SDLK_o:
+			makeChild(graph.selected);
+			return;
+		case SDLK_d:
+			removeNodeFromGraph(graph.selected);
+			return;
+		case SDLK_h:
+			if ( graph.selected->children->num >= 1 ){
+				graph.selected = graph.selected->children->array[0];
+			}
+			return;
+		case SDLK_l:
+			if ( graph.selected->children->num >= 1 ){
+				graph.selected = graph.selected->children->array[graph.selected->children->num-1];
+			}
+			return;
+		case SDLK_k:
+			graph.selected = graph.selected->p;
+			return;
+		case SDLK_t:
+			mode = Travel;
+			populateTravelText(graph.selected);
+			return;
+		case SDLK_e:
+			mode = Edit;
+			return;
+	}
+	break; // end of Default bindings
+	case Travel:
+	switch(event->keysym.sym) {
+		case SDLK_t:
+			switch2Default();
+			return;
+		case SDLK_e:
+			switch2Default(); // exiting travel mode requires freeing some memory
+			mode = Edit;
+			return;
+	}
+	break; // end of Travel bindings
+	case Edit: {
+		return; // edit-mode specific key-binds don't really exist
+	}
 	}
 }
 
@@ -319,13 +336,13 @@ void eventHandler(SDL_Event *event) {
 	switch (event->type)
 	{
 		case SDL_TEXTINPUT:
-			if (graph.mode == Edit){
+			if (mode == Edit){
 				if ( graph.selected->text_len < MAX_TEXT_LEN )
 					graph.selected->text[graph.selected->text_len++] = event->edit.text[0];
 			}
-			if (graph.mode == Travel){
+			if (mode == Travel){
 				// go to node specified by travel chars
-				printf("handling travel input: %d/%d\n", TRAVEL_CHAR_I, MAX_NUM_TRAVEL_CHARS);
+				debug_print("handling travel input: %d/%d\n", TRAVEL_CHAR_I, MAX_NUM_TRAVEL_CHARS);
 				if ( TRAVEL_CHAR_I < MAX_NUM_TRAVEL_CHARS ) {
 					TRAVEL_CHAR_BUF[TRAVEL_CHAR_I++] = event->edit.text[0];
 					// check if any nodes travel text matches current input
@@ -333,18 +350,18 @@ void eventHandler(SDL_Event *event) {
 						if ( strcmp(TRAVEL_CHAR_BUF, TRAVEL_NODES[i]->travel_text) == 0 ){
 							graph.selected = TRAVEL_NODES[i];
 							// reset travel text
-							printf("freeing travel chars\n");
+							debug_print("freeing travel chars\n");
 							if ( TRAVEL_CHAR_BUF ) free(TRAVEL_CHAR_BUF);
-							printf("freed travel chars\n");
+							debug_print("freed travel chars\n");
 							TRAVEL_CHAR_BUF = calloc(MAX_NUM_TRAVEL_CHARS, sizeof(char));
 							TRAVEL_CHAR_I = 0;
 							populateTravelText(graph.selected);
-							printf("changing nodes\n");
+							debug_print("changing nodes\n");
 						}
 
 					}
 				}
-				printf("handled travel input\n");
+				debug_print("handled travel input\n");
 
 
 			}
@@ -363,8 +380,7 @@ void eventHandler(SDL_Event *event) {
 
 				int w, h;
 				SDL_GetWindowSize(app.window, &w, &h);
-				if ( DEBUG )
-					printf("window resized from %dx%d to %dx%d\n", app.window_size.x, app.window_size.y, w, h);
+				debug_print("window resized from %dx%d to %dx%d\n", app.window_size.x, app.window_size.y, w, h);
 				app.window_size.x = w;
 				app.window_size.y = h;
 			}
@@ -447,12 +463,10 @@ void drawNode(Node* node) {
 
 	int x = (int) ((node->pos.x) * app.window_size.x);
 	int y = (int) ((node->pos.y) * app.window_size.y);
-	if ( DEBUG ){
-		printf("%d %d from %f %f for node %p\n", x, y, node->pos.x, node->pos.y, node);
-		printf("node %p\n", node);
-		printf("children %p\n", node->children);
-		printf("num children %lu\n", node->children->num);
-	}
+	debug_print("%d %d from %f %f for node %p\n", x, y, node->pos.x, node->pos.y, node);
+	debug_print("node %p\n", node);
+	debug_print("children %p\n", node->children);
+	debug_print("num children %lu\n", node->children->num);
 	/* draw red ring for unselected nodes, green for selected */
 	if (node != graph.selected)
 		drawRing(app.renderer, x, y, RADIUS, THICKNESS, 0xFF, 0x00, 0x00, 0x00);
@@ -466,7 +480,7 @@ void drawNode(Node* node) {
 	/* render node text */
 	renderMessage(node->text, message_pos, TEXTBOX_WIDTH_SCALE*node->text_len, TEXTBOX_HEIGHT, EDIT_COLOR);
 	/* render travel text */
-	if ( graph.mode == Travel ){
+	if ( mode == Travel ){
 		if (strlen(node->travel_text) > 0){
 			// position char in center of node
 			message_pos.x = (int) ((node->pos.x) * app.window_size.x)  - (int)((TEXTBOX_WIDTH_SCALE) / 2) - RADIUS;
@@ -483,8 +497,7 @@ void drawNode(Node* node) {
 	}
 
 	for (int i=0; i<node->children->num; i++){
-		if ( DEBUG )
-			printf("child %d / %lu: %p\n", i, node->children->num, node->children->array[i]);
+		debug_print("child %d / %lu: %p\n", i, node->children->num, node->children->array[i]);
 		drawNode(node->children->array[i]);
 	}
 }
@@ -494,8 +507,7 @@ void renderMessage(char* message, Point pos, double width, double height, SDL_Co
 	if (!message)
 		return;
 
-	if ( DEBUG )
-		printf("rendering %s\n", message);
+	debug_print("rendering %s\n", message);
 
 	// create surface from string
 	SDL_Surface* surfaceMessage =
@@ -527,8 +539,7 @@ void update_pos_children(Node* node, double leftmost_bound, double rightmost_bou
 	node->pos.x = (rightmost_bound + leftmost_bound) / 2;
 	node->pos.y = level;
 
-	if ( DEBUG )
-		printf("update node position to %lf %lf\n", node->pos.x, node->pos.y);
+	debug_print("update node position to %lf %lf\n", node->pos.x, node->pos.y);
 
 	/* if ( node == graph.selected ) */
 	/*	printf("selected: %lf %lf\n", leftmost_bound, rightmost_bound); */
@@ -542,11 +553,9 @@ void update_pos_children(Node* node, double leftmost_bound, double rightmost_bou
 	double iter = leftmost_bound;
 
 	for (int i = 0; i < node->children->num; i += 1){
-		if ( DEBUG ){
-			printf("loop %d / %ld with step %lf\n", i, node->children->num, step);
-			printf("%d %p\n", i, node->children->array[i]);
-			printf("%p->%p [%lf %lf]\n", node, node->children->array[i], iter, iter+step);
-		}
+		debug_print("loop %d / %ld with step %lf\n", i, node->children->num, step);
+		debug_print("%d %p\n", i, node->children->array[i]);
+		debug_print("%p->%p [%lf %lf]\n", node, node->children->array[i], iter, iter+step);
 		update_pos_children(node->children->array[i], iter, iter + step, level + LAYER_MARGIN);
 		iter += step;
 	}
@@ -556,20 +565,20 @@ void update_pos_children(Node* node, double leftmost_bound, double rightmost_bou
 
 void compute_root_bounds_from_selected_and_update_pos_children(Node* node, double leftmost_bound, double rightmost_bound, double level){
 
-	printf("crb start\n");
+	debug_print("crb start\n");
 	/* If we reached the root, compute all child bounds relative to the root bounds */
 	if (node == graph.root){
 		update_pos_children(node, leftmost_bound, rightmost_bound, level);
 		return;
 	}
-	printf("root not reached\n");
+	debug_print("root not reached\n");
 
 	/* we step through each sibling of the current node,
 	giving each child the same size as the current node */
 	double step_size = rightmost_bound - leftmost_bound;
 	int child_idx = 0;
 
-	printf("computing node children\n");
+	debug_print("computing node children\n");
 	/* compute idx of child relative to parent */
 	for (int i = 0; i < node->p->children->num; i++) {
 		if (node->p->children->array[i] == node){
@@ -577,13 +586,13 @@ void compute_root_bounds_from_selected_and_update_pos_children(Node* node, doubl
 			break;
 		}
 	}
-	printf("computed node children\n");
+	debug_print("computed node children\n");
 	/* compute the left and right boundaries of the parent node relative
 	to the location of the child */
 	double parent_left_bound = leftmost_bound - (step_size * child_idx);
 	double parent_right_bound = rightmost_bound + (step_size * (node->p->children->num - child_idx-1));
 	compute_root_bounds_from_selected_and_update_pos_children(node->p, parent_left_bound, parent_right_bound, level - LAYER_MARGIN);
-	printf("crb end\n");
+	debug_print("crb end\n");
 }
 
 /* Debug function, used to print locations of all nodes in indented hierarchy */
@@ -629,8 +638,8 @@ void prepareScene() {
 	Point mode_text_pos;
 	mode_text_pos.x = (int) ((0.0) * app.window_size.x);
 	mode_text_pos.y = (int) ((0.0) * app.window_size.y);
-	printf("rendering %s\n", enum2Name(graph.mode));
-	renderMessage(enum2Name(graph.mode), mode_text_pos, strlen(enum2Name(graph.mode)) * TEXTBOX_WIDTH_SCALE, TEXTBOX_HEIGHT, EDIT_COLOR);
+	debug_print("rendering %s\n", getModeName());
+	renderMessage(getModeName(), mode_text_pos, strlen(getModeName()) * TEXTBOX_WIDTH_SCALE, TEXTBOX_HEIGHT, EDIT_COLOR);
 }
 
 /* actually renders the screen */
@@ -733,39 +742,39 @@ void makeGraph(){
 	graph.num_nodes = 0;
 	graph.selected = graph.root;
 	graph.root->p = graph.root;
-	graph.mode = Default;
+	mode = Default;
 }
 
 
 void clearTravelText() {
-	printf("start clearTravelText()\n");
+	debug_print("start clearTravelText()\n");
 	// return if already freed
 	if ( TRAVEL_NODES == NULL || NUM_TRAVEL_NODES == 0 )
 		return;
-	printf("travel nodes %p, num %d\n", TRAVEL_NODES, NUM_TRAVEL_NODES);
+	debug_print("travel nodes %p, num %d\n", TRAVEL_NODES, NUM_TRAVEL_NODES);
 	// Clear all travel text in each travel node
 	for (int i = 0; i < NUM_TRAVEL_NODES; ++i) {
 		for (int j = 0; j < MAX_NUM_TRAVEL_CHARS; j++) {
-			printf("node %d (%p)\n", i, TRAVEL_NODES[i]);
-			printf("travel_text %p\n", TRAVEL_NODES[i]->travel_text);
+			debug_print("node %d (%p)\n", i, TRAVEL_NODES[i]);
+			debug_print("travel_text %p\n", TRAVEL_NODES[i]->travel_text);
 			if (TRAVEL_NODES[i]->travel_text)
 				TRAVEL_NODES[i]->travel_text[j] = '\0';
-			printf("accessed travel text\n");
+			debug_print("accessed travel text\n");
 		}
 	}
 	// Clear travel node array
-	printf("freeing TRAVEL_NODES\n");
+	debug_print("freeing TRAVEL_NODES\n");
 	if ( TRAVEL_NODES )
 		free ( TRAVEL_NODES );
 	TRAVEL_NODES = NULL;
 	NUM_TRAVEL_NODES = 0;
-	printf("end clearTravelText()\n");
+	debug_print("end clearTravelText()\n");
 }
 
 void populateTravelText(Node* node){
 	// Current method: add parent and children
 	// New method: add every node that is visible
-	printf("populate start\n");
+	debug_print("populate start\n");
 	clearTravelText();
 	node->p->travel_text[0] = 'k';
 	// cancel if too many children
@@ -780,10 +789,10 @@ void populateTravelText(Node* node){
 	// Add children
 	for (int i = 0; i < node->children->num; ++i) {
 		node->children->array[i]->travel_text[0] = TRAVEL_CHARS[i];
-		printf("travel txt: %p\n", node->children->array[i]->travel_text);
+		debug_print("travel txt: %p\n", node->children->array[i]->travel_text);
 		TRAVEL_NODES[i+1] = node->children->array[i];
 	}
-	printf("populate end\n");
+	debug_print("populate end\n");
 }
 
 /* Recursively print children of nodes, with each child indented once from the parent */
@@ -798,11 +807,11 @@ void writeChildrenStrings(FILE* file, Node* node, int level){
 
 
 void write(){
-	printf("write start\n");
+	debug_print("write start\n");
  	FILE* output = fopen(FILENAME, "w");
-	printf("write open done\n");
+	debug_print("write open done\n");
 	writeChildrenStrings(output, graph.root, 0);
-	printf("write children done\n");
+	debug_print("write children done\n");
 	fclose(output);
 }
 
@@ -895,21 +904,21 @@ int main(int argc, char *argv[]) {
 
 		/* Handle input before rendering */
 		eventHandler(&e);
-		printf("event handler done\n");
+		debug_print("event handler done\n");
 
-		printf("prepare scene start\n");
+		debug_print("prepare scene start\n");
 		prepareScene();
-		printf("prepare scene end\n");
+		debug_print("prepare scene end\n");
 
-		printf("present scene start\n");
+		debug_print("present scene start\n");
 		presentScene();
-		printf("present scene end\n");
+		debug_print("present scene end\n");
 
 		SDL_Delay(0);
 	}
-	printf("saving...\n");
+	debug_print("saving...\n");
 	write();
-	printf("saved\n");
+	debug_print("saved\n");
 
 	if (TRAVEL_CHAR_BUF)
 		free(TRAVEL_CHAR_BUF);
