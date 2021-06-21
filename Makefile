@@ -1,6 +1,9 @@
-CFLAGS=-g -O2 -Wall $(shell sdl2-config --cflags)
-LDFLAGS=-g -O2 -Wall $(shell sdl2-config --libs) -lSDL2_ttf
+CFLAGS=-g -O3 -Wall $(shell sdl2-config --cflags)
+LDLIBS=$(shell sdl2-config --libs) -lSDL2_ttf
 
-PROGRAMS=$(basename $(wildcard *.c))
+TARGET=$(basename $(wildcard *.c))
 
-all: $(PROGRAMS)
+all: $(TARGET)
+
+clean: 
+	$(RM) $(TARGET)
