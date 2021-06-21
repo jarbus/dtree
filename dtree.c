@@ -1,8 +1,8 @@
 // TODO
 // - travel mode
-//     - better population of text
-//     - issue: handle invalid characters properly
-//     - qol: highlight matching characters as you fill them in
+// 	- better population of text
+// 	- issue: handle invalid characters properly
+// 	- qol: highlight matching characters as you fill them in
 // - make parent visible
 // - add way to edit file name in app
 // - add, copy, paste functionality
