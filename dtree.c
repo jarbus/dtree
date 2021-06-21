@@ -144,13 +144,12 @@ void populateTravelText(Node* node);
 char* getModeName();
 
 char* getModeName(){
-	if ( mode == Default )
-		return "DEFAULT";
-	if ( mode == Edit )
-		return "EDIT";
-	if ( mode == Travel )
-		return "TRAVEL";
-	return NULL;
+	switch(mode) {
+		case Default: return "DEFAULT";
+		case Edit: return "EDIT";
+		case Travel: return "TRAVEL";
+		default: return NULL;
+	}
 }
 
 
