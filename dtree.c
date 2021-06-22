@@ -1,8 +1,8 @@
 // TODO
 // - travel mode
-// 	- better population of text
-// 	- issue: handle invalid characters properly
-// 	- qol: highlight matching characters as you fill them in
+//     - better population of text
+//     - issue: handle invalid characters properly
+//     - qol: highlight matching characters as you fill them in
 // - make parent visible
 // - add way to edit file name in app
 // - add, copy, paste functionality
@@ -58,10 +58,11 @@ struct App {
 
 /* dynamic array to save me some headache, code is stolen from stack overflow */
 struct Array {
-  Node **array;
-  size_t num;  /* number of children in array */
-  size_t size; /* max size of array */
+    Node **array;
+    size_t num;  /* number of children in array */
+    size_t size; /* max size of array */
 };
+
 
 struct Node {
     struct Node* p;
@@ -106,9 +107,7 @@ static int MAX_NUM_TRAVEL_CHARS = 2;
 // current idx of travel char
 static int TRAVEL_CHAR_I = 0;
 // array of all nodes to be traveled to
-static Node** TRAVEL_NODES;
-// length of TRAVEL_NODES
-static int NUM_TRAVEL_NODES;
+static Array* TRAVEL_NODES;
 // buffer to store current travel hint progress
 static char* TRAVEL_CHAR_BUF;
 static char* FILENAME;
@@ -139,6 +138,9 @@ void writeChildrenStrings(FILE* file, Node* node, int level);
 void readfile();
 void deleteNode(Node* node);
 void removeNodeFromGraph(Node* node);
+Array* initArray(size_t initialSize);
+void freeArray(Array *a);
+void* popArray(Array *a);
 void clearTravelText();
 void populateTravelText(Node* node);
 char* getModeName();
@@ -162,6 +164,9 @@ double clip(double num, double min, double max){
 }
 
 void initSDL() {
+
+    TRAVEL_NODES = initArray(10);
+
     int rendererFlags, windowFlags;
 
     rendererFlags = SDL_RENDERER_ACCELERATED;
@@ -229,11 +234,9 @@ void initSDL() {
 }
 
 void switch2Default(){
-    debug_print("switching to default\n");
+    printf("switching to default\n");
     if ( mode == Travel ){
-        free (TRAVEL_NODES);
-        TRAVEL_NODES = NULL;
-        NUM_TRAVEL_NODES = 0;
+        freeArray (TRAVEL_NODES);
         TRAVEL_CHAR_I = 0;
         if ( TRAVEL_CHAR_BUF ) free(TRAVEL_CHAR_BUF);
         TRAVEL_CHAR_BUF = calloc(MAX_NUM_TRAVEL_CHARS, sizeof(char));
@@ -346,9 +349,9 @@ void eventHandler(SDL_Event *event) {
                 if ( TRAVEL_CHAR_I < MAX_NUM_TRAVEL_CHARS ) {
                     TRAVEL_CHAR_BUF[TRAVEL_CHAR_I++] = event->edit.text[0];
                     // check if any nodes travel text matches current input
-                    for (int i = 0; i < NUM_TRAVEL_NODES; ++i) {
-                        if ( strcmp(TRAVEL_CHAR_BUF, TRAVEL_NODES[i]->travel_text) == 0 ){
-                            graph.selected = TRAVEL_NODES[i];
+                    for (int i = 0; i < TRAVEL_NODES->num; ++i) {
+                        if ( strcmp(TRAVEL_CHAR_BUF, TRAVEL_NODES->array[i]->travel_text) == 0 ){
+                            graph.selected = TRAVEL_NODES->array[i];
                             // reset travel text
                             debug_print("freeing travel chars\n");
                             if ( TRAVEL_CHAR_BUF ) free(TRAVEL_CHAR_BUF);
@@ -749,28 +752,37 @@ void makeGraph(){
 void clearTravelText() {
     debug_print("start clearTravelText()\n");
     // return if already freed
-    if ( TRAVEL_NODES == NULL || NUM_TRAVEL_NODES == 0 )
+    if ( TRAVEL_NODES == NULL || TRAVEL_NODES->num == 0 )
         return;
-    debug_print("travel nodes %p, num %d\n", TRAVEL_NODES, NUM_TRAVEL_NODES);
+    debug_print("travel nodes %p, num %d\n", TRAVEL_NODES, TRAVEL_NODES->num);
     // Clear all travel text in each travel node
-    for (int i = 0; i < NUM_TRAVEL_NODES; ++i) {
+    for (int i = 0; i < TRAVEL_NODES->num; ++i) {
         for (int j = 0; j < MAX_NUM_TRAVEL_CHARS; j++) {
-            debug_print("node %d (%p)\n", i, TRAVEL_NODES[i]);
-            debug_print("travel_text %p\n", TRAVEL_NODES[i]->travel_text);
-            if (TRAVEL_NODES[i]->travel_text)
-                TRAVEL_NODES[i]->travel_text[j] = '\0';
+            debug_print("node %d (%p)\n", i, TRAVEL_NODES->array[i]);
+            debug_print("travel_text %p\n", TRAVEL_NODES->array[i]->travel_text);
+            if (TRAVEL_NODES->array[i]->travel_text)
+                TRAVEL_NODES->array[i]->travel_text[j] = '\0';
             debug_print("accessed travel text\n");
         }
     }
     // Clear travel node array
     debug_print("freeing TRAVEL_NODES\n");
-    if ( TRAVEL_NODES )
-        free ( TRAVEL_NODES );
-    TRAVEL_NODES = NULL;
-    NUM_TRAVEL_NODES = 0;
+    if ( TRAVEL_NODES->array )
+        freeArray ( TRAVEL_NODES );
     debug_print("end clearTravelText()\n");
 }
 
+// Add all visible nodes to TRAVEL_NODES
+void populateTravelNodes(Node* node){
+    if ( !node )
+        return;
+    if ( 0.0 < node->pos.x < 1.0 && 0.0 < node->pos.y < 1.0 )
+        insertArray(TRAVEL_NODES, node);
+    for (int i = 0; i < node->children->num; ++i) {
+        populateTravelNodes(node->children->array[i]);
+    }
+
+}
 void populateTravelText(Node* node){
     // Current method: add parent and children
     // New method: add every node that is visible
@@ -779,20 +791,20 @@ void populateTravelText(Node* node){
     node->p->travel_text[0] = 'k';
     // cancel if too many children
     if ( node->children->num > strlen(TRAVEL_CHARS) ){
-        TRAVEL_NODES = NULL;
+        freeArray(TRAVEL_NODES);
         return;
     }
-    NUM_TRAVEL_NODES = node->children->num + 1;
-    TRAVEL_NODES = (Node**) calloc(NUM_TRAVEL_NODES, sizeof(Node**));
     // Add parent
-    TRAVEL_NODES[0] = node->p;
+    insertArray(TRAVEL_NODES, node->p);
     // Add children
     for (int i = 0; i < node->children->num; ++i) {
         node->children->array[i]->travel_text[0] = TRAVEL_CHARS[i];
-        debug_print("travel txt: %p\n", node->children->array[i]->travel_text);
-        TRAVEL_NODES[i+1] = node->children->array[i];
+        printf("travel txt: %p\n", node->children->array[i]->travel_text);
+        insertArray(TRAVEL_NODES, node->children->array[i]);
     }
-    debug_print("populate end\n");
+    // parent is always k
+    node->p->travel_text = "k\0";
+    printf("populate end\n");
 }
 
 /* Recursively print children of nodes, with each child indented once from the parent */
@@ -807,11 +819,10 @@ void writeChildrenStrings(FILE* file, Node* node, int level){
 
 
 void write(){
-    debug_print("write start\n");
+    if ( FILENAME == NULL ) return;
      FILE* output = fopen(FILENAME, "w");
     debug_print("write open done\n");
     writeChildrenStrings(output, graph.root, 0);
-    debug_print("write children done\n");
     fclose(output);
 }
 
@@ -885,7 +896,7 @@ int main(int argc, char *argv[]) {
         readfile();
     }
     else{
-        FILENAME = "test.txt";
+        FILENAME = "unnamed.txt";
     }
 
     TRAVEL_CHAR_BUF = calloc(MAX_NUM_TRAVEL_CHARS + 1, sizeof(char));
