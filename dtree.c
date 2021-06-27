@@ -23,10 +23,14 @@
 #include <stdbool.h>
 #include <string.h>
 
-// as per https://stackoverflow.com/questions/1644868/define-macro-for-debug-printing-in-c
-#define DEBUG 0
-#define debug_print(...) \
-        do { if (DEBUG) fprintf(stderr, __VA_ARGS__); } while (0)
+// Originally
+// https://stackoverflow.com/questions/1644868/define-macro-for-debug-printing-in-c
+// EDIT: https://stackoverflow.com/questions/1941307/debug-print-macro-in-c
+#ifdef DEBUG
+#define debug_print(...) fprintf(stderr, __VA_ARGS__);
+#else
+#define debug_print(...) /* no instruction */
+#endif
 
 #define SCREEN_WIDTH   1280
 #define SCREEN_HEIGHT  720
@@ -622,8 +626,10 @@ void prepareScene() {
                 clip(SIDE_MARGIN * SCALE, 0.0, 1.0),
                 clip(1.0 - (SIDE_MARGIN * SCALE), 0.0, 1.0),
                 0.5);
-    if ( DEBUG )
-        recursively_print_positions(graph.root, 0);
+
+#ifdef DEBUG
+    recursively_print_positions(graph.root, 0);
+#endif
 
     // Draw Graph
     drawNode(graph.root);
