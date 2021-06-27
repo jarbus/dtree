@@ -6,3 +6,7 @@ ttf-demo/
 SDL2_ttf-2.0.15/
 build-and-run
 test.txt
+
+# LSP
+compile_commands.json
+.clangd/
