@@ -1,6 +1,7 @@
 // TODO
 // - travel mode
 //     - better population of text
+//       - travel_text is getting freed somewhere/somehow
 //     - issue: handle invalid characters properly
 //     - qol: highlight matching characters as you fill them in
 // - make parent visible
@@ -62,10 +63,11 @@ struct App {
 
 /* dynamic array to save me some headache, code is stolen from stack overflow */
 struct Array {
-  Node **array;
-  size_t num;  /* number of children in array */
-  size_t size; /* max size of array */
+    Node **array;
+    size_t num;  /* number of children in array */
+    size_t size; /* max size of array */
 };
+
 
 struct Node {
     struct Node* p;
@@ -86,7 +88,7 @@ static App app;
 static Graph graph;
 static enum Mode mode = Default;
 
-static const char* TRAVEL_CHARS = "asdfghjl;";
+static const char* TRAVEL_CHARS = "asdfghjl;\0";
 // radius and thickness of node ring
 static int RADIUS = 50;
 static int THICKNESS = 10;
@@ -110,9 +112,7 @@ static int MAX_NUM_TRAVEL_CHARS = 2;
 // current idx of travel char
 static int TRAVEL_CHAR_I = 0;
 // array of all nodes to be traveled to
-static Node** TRAVEL_NODES;
-// length of TRAVEL_NODES
-static int NUM_TRAVEL_NODES;
+static Array* TRAVEL_NODES;
 // buffer to store current travel hint progress
 static char* TRAVEL_CHAR_BUF;
 static char* FILENAME;
@@ -143,9 +143,13 @@ void writeChildrenStrings(FILE* file, Node* node, int level);
 void readfile();
 void deleteNode(Node* node);
 void removeNodeFromGraph(Node* node);
+Array* initArray(size_t initialSize);
+void* freeArray(Array *a);
+void* popArray(Array *a);
 void clearTravelText();
 void populateTravelText(Node* node);
 char* getModeName();
+void switch2Default();
 
 char* getModeName(){
     switch(mode) {
@@ -166,6 +170,9 @@ double clip(double num, double min, double max){
 }
 
 void initSDL() {
+
+    TRAVEL_NODES = initArray(10);
+
     int rendererFlags, windowFlags;
 
     rendererFlags = SDL_RENDERER_ACCELERATED;
@@ -235,9 +242,7 @@ void initSDL() {
 void switch2Default(){
     debug_print("switching to default\n");
     if ( mode == Travel ){
-        free (TRAVEL_NODES);
-        TRAVEL_NODES = NULL;
-        NUM_TRAVEL_NODES = 0;
+        TRAVEL_NODES = freeArray (TRAVEL_NODES);
         TRAVEL_CHAR_I = 0;
         if ( TRAVEL_CHAR_BUF ) free(TRAVEL_CHAR_BUF);
         TRAVEL_CHAR_BUF = calloc(MAX_NUM_TRAVEL_CHARS, sizeof(char));
@@ -312,6 +317,7 @@ void doKeyUp(SDL_KeyboardEvent *event) {
             return;
         case SDLK_t:
             mode = Travel;
+            debug_print("boop\n");
             populateTravelText(graph.selected);
             return;
         case SDLK_e:
@@ -341,33 +347,50 @@ void eventHandler(SDL_Event *event) {
     {
         case SDL_TEXTINPUT:
             if (mode == Edit){
-                if ( graph.selected->text_len < MAX_TEXT_LEN )
+
+                if ( graph.selected->text_len < MAX_TEXT_LEN ){
+                    debug_print("Adding text\n");
                     graph.selected->text[graph.selected->text_len++] = event->edit.text[0];
+                    debug_print("edit.text[0]: %c\n", event->edit.text[0]);
+                    debug_print("first: %c\n", graph.selected->text[0]);
+                    debug_print("new text, len %d: %s\n", graph.selected->text_len, graph.selected->text);
+                }
             }
             if (mode == Travel){
                 // go to node specified by travel chars
                 debug_print("handling travel input: %d/%d\n", TRAVEL_CHAR_I, MAX_NUM_TRAVEL_CHARS);
-                if ( TRAVEL_CHAR_I < MAX_NUM_TRAVEL_CHARS ) {
+                // if hardcode k to be parent
+                if ( event->edit.text[0] == 'k' ){
+                    graph.selected = graph.selected->p;
+                    prepareScene();
+                    populateTravelText(graph.selected);
+                }
+                // check if current travel buffer doesn't exceed max chars
+                if ( TRAVEL_CHAR_I >= MAX_NUM_TRAVEL_CHARS )
+                    break;
+                for (int i = 0; i < strlen(TRAVEL_CHARS); ++i) {
+                    if ( TRAVEL_CHARS[i] != event->edit.text[0] )
+                        continue;
+                    // if character is valid travel char, add it to buffer
                     TRAVEL_CHAR_BUF[TRAVEL_CHAR_I++] = event->edit.text[0];
                     // check if any nodes travel text matches current input
-                    for (int i = 0; i < NUM_TRAVEL_NODES; ++i) {
-                        if ( strcmp(TRAVEL_CHAR_BUF, TRAVEL_NODES[i]->travel_text) == 0 ){
-                            graph.selected = TRAVEL_NODES[i];
-                            // reset travel text
-                            debug_print("freeing travel chars\n");
-                            if ( TRAVEL_CHAR_BUF ) free(TRAVEL_CHAR_BUF);
-                            debug_print("freed travel chars\n");
-                            TRAVEL_CHAR_BUF = calloc(MAX_NUM_TRAVEL_CHARS, sizeof(char));
-                            TRAVEL_CHAR_I = 0;
-                            populateTravelText(graph.selected);
-                            debug_print("changing nodes\n");
-                        }
-
+                    for (int i = 0; i < TRAVEL_NODES->num; ++i) {
+                        // continue if travel buffer != any travel text
+                        if ( strcmp(TRAVEL_CHAR_BUF, TRAVEL_NODES->array[i]->travel_text) != 0 )
+                            continue;
+                        graph.selected = TRAVEL_NODES->array[i];
+                        // reset travel text
+                        debug_print("freeing travel chars\n");
+                        if ( TRAVEL_CHAR_BUF ) free(TRAVEL_CHAR_BUF);
+                        debug_print("freed travel chars\n");
+                        TRAVEL_CHAR_BUF = calloc(MAX_NUM_TRAVEL_CHARS, sizeof(char));
+                        TRAVEL_CHAR_I = 0;
+                        prepareScene();
+                        populateTravelText(graph.selected);
+                        debug_print("changing nodes\n");
                     }
                 }
                 debug_print("handled travel input\n");
-
-
             }
             break;
 
@@ -681,11 +704,12 @@ void* popArray(Array *a){
     return NULL;
 }
 
-void freeArray(Array *a) {
+void* freeArray(Array *a) {
     free(a->array);
     a->array = NULL;
     a->num = a->size = 0;
     free(a);
+    return NULL;
 }
 
 /* creates a new node at the origin */
@@ -710,6 +734,7 @@ Node* makeChild(Node* parent){
 }
 
 void deleteNode(Node* node){
+    debug_print("DELETEING\n");
     /* Handle nodes that have already been deleted */
     if ( node == NULL ) {
         return;
@@ -720,10 +745,14 @@ void deleteNode(Node* node){
     }
 
     /* Then delete node */
+    debug_print("deleting node %p\n", node);
     freeArray(node->children);
     free(node->text);
+    debug_print("deleting travel text %p\n", node);
     free(node->travel_text);
+    debug_print("deleted travel text %p\n", node);
     free(node);
+    debug_print("deleted node %p\n", node);
 }
 
 void removeNodeFromGraph(Node* node){
@@ -755,50 +784,100 @@ void makeGraph(){
 void clearTravelText() {
     debug_print("start clearTravelText()\n");
     // return if already freed
-    if ( TRAVEL_NODES == NULL || NUM_TRAVEL_NODES == 0 )
+    if (TRAVEL_NODES == NULL)
+        debug_print("travel nodes %p\n", TRAVEL_NODES);
+    if (TRAVEL_NODES == NULL || TRAVEL_NODES->array == NULL){
         return;
-    debug_print("travel nodes %p, num %d\n", TRAVEL_NODES, NUM_TRAVEL_NODES);
+    }
+    debug_print("travel nodes %p, num %ld\n", TRAVEL_NODES->array, TRAVEL_NODES->num);
     // Clear all travel text in each travel node
-    for (int i = 0; i < NUM_TRAVEL_NODES; ++i) {
+    for (int i = 0; i < TRAVEL_NODES->num; ++i) {
         for (int j = 0; j < MAX_NUM_TRAVEL_CHARS; j++) {
-            debug_print("node %d (%p)\n", i, TRAVEL_NODES[i]);
-            debug_print("travel_text %p\n", TRAVEL_NODES[i]->travel_text);
-            if (TRAVEL_NODES[i]->travel_text)
-                TRAVEL_NODES[i]->travel_text[j] = '\0';
+            debug_print("node %d (%p)\n", i, TRAVEL_NODES->array[i]);
+            debug_print("travel_text %p\n", TRAVEL_NODES->array[i]->travel_text);
+            if (TRAVEL_NODES->array[i]->travel_text){
+                debug_print("in if %d: %s\n", j, TRAVEL_NODES->array[i]->travel_text);
+                TRAVEL_NODES->array[i]->travel_text[j] = '\0';
+            }
             debug_print("accessed travel text\n");
         }
     }
     // Clear travel node array
     debug_print("freeing TRAVEL_NODES\n");
-    if ( TRAVEL_NODES )
-        free ( TRAVEL_NODES );
-    TRAVEL_NODES = NULL;
-    NUM_TRAVEL_NODES = 0;
+    if ( TRAVEL_NODES->array )
+        TRAVEL_NODES = freeArray ( TRAVEL_NODES );
     debug_print("end clearTravelText()\n");
 }
 
+// Add all visible nodes to TRAVEL_NODES
+void populateTravelNodes(Node* node){
+    if ( !node )
+        return;
+    debug_print("adding travel node: %fx%f\n", node->pos.x, node->pos.y);
+    if ( 0.0 < node->pos.x && node->pos.x < 1.0 && 0.0 < node->pos.y && node->pos.y < 1.0 ){
+        debug_print("hello\n");
+        insertArray(TRAVEL_NODES, node);
+        debug_print("added\n");
+    }
+    debug_print("hello2\n");
+    for (int i = 0; i < node->children->num; ++i) {
+        debug_print("going to next child\n");
+        populateTravelNodes(node->children->array[i]);
+    }
+
+}
 void populateTravelText(Node* node){
     // Current method: add parent and children
     // New method: add every node that is visible
     debug_print("populate start\n");
     clearTravelText();
-    node->p->travel_text[0] = 'k';
-    // cancel if too many children
-    if ( node->children->num > strlen(TRAVEL_CHARS) ){
-        TRAVEL_NODES = NULL;
-        return;
+
+    TRAVEL_NODES = initArray(10);
+    populateTravelNodes(graph.root);
+    debug_print("cleared\n");
+    debug_print("%p: %s\n",node->p->travel_text, node->p->travel_text);
+    // TODO PICKUP FROM HERE
+    char** queue = calloc(8192, sizeof(char*));
+    char* prefix = calloc(MAX_NUM_TRAVEL_CHARS+1, sizeof(char));
+    int front = 0, back=0, done=0;
+    while ( !done ){
+        debug_print("iterating while, back: %d, front: %d\n", back, front);
+        for (int i = 0; i < strlen(TRAVEL_CHARS); ++i) {
+            queue[back] = calloc(MAX_NUM_TRAVEL_CHARS+1, sizeof(char));
+            strcpy(queue[back], prefix);
+            queue[back][strlen(prefix)] = TRAVEL_CHARS[i];
+            debug_print("allocated %p: %s\n", queue[back], queue[back]);
+            debug_print("===== back-front: %d string: %s travel_nodes->num %ld\n", back-front, queue[back], TRAVEL_NODES->num);
+            if ( back - front == TRAVEL_NODES->num){
+                done = 1;
+                break;
+            }
+            back++;
+        }
+        prefix = queue[front++];
     }
-    NUM_TRAVEL_NODES = node->children->num + 1;
-    TRAVEL_NODES = (Node**) calloc(NUM_TRAVEL_NODES, sizeof(Node**));
-    // Add parent
-    TRAVEL_NODES[0] = node->p;
-    // Add children
-    for (int i = 0; i < node->children->num; ++i) {
-        node->children->array[i]->travel_text[0] = TRAVEL_CHARS[i];
-        debug_print("travel txt: %p\n", node->children->array[i]->travel_text);
-        TRAVEL_NODES[i+1] = node->children->array[i];
+    debug_print("loop 1\n");
+    for (int i = 0; i < front; ++i) {
+        free(queue[i]);
     }
-    debug_print("populate end\n");
+    debug_print("loop 2, %ld TRAVEL_NODES, front: %d back: %d\n", TRAVEL_NODES->num, front, back);
+    for (int i = 0; i < TRAVEL_NODES->num; i++) {
+
+        debug_print("%p: %s\n", TRAVEL_NODES->array[i]->travel_text, queue[front + i]);
+        strcpy(TRAVEL_NODES->array[i]->travel_text, queue[front + i]);
+        free(queue[front + i]);
+        debug_print("freed\n");
+    }
+    debug_print("loop 3\n");
+    for (int i = front + TRAVEL_NODES->num; i < back; ++i) {
+        free(queue[i]);
+
+    }
+    free(queue);
+
+    // parent is always k
+    strcpy(node->p->travel_text,"k\0");
+    debug_print("==== populate end\n");
 }
 
 /* Recursively print children of nodes, with each child indented once from the parent */
@@ -813,11 +892,10 @@ void writeChildrenStrings(FILE* file, Node* node, int level){
 
 
 void write(){
-    debug_print("write start\n");
+    if ( FILENAME == NULL ) return;
      FILE* output = fopen(FILENAME, "w");
     debug_print("write open done\n");
     writeChildrenStrings(output, graph.root, 0);
-    debug_print("write children done\n");
     fclose(output);
 }
 
@@ -891,7 +969,7 @@ int main(int argc, char *argv[]) {
         readfile();
     }
     else{
-        FILENAME = "test.txt";
+        FILENAME = "unnamed.txt";
     }
 
     TRAVEL_CHAR_BUF = calloc(MAX_NUM_TRAVEL_CHARS + 1, sizeof(char));
@@ -904,6 +982,9 @@ int main(int argc, char *argv[]) {
     /* Only updates display and processes inputs on new events */
     while ( !app.quit && SDL_WaitEvent(&e) ) {
 
+        debug_print("start loop\n");
+        if ( TRAVEL_NODES )
+            debug_print("%ld/%ld\n", TRAVEL_NODES ->num, TRAVEL_NODES->size);
         /* Handle Resize */
         switch (e.type){
         }
@@ -921,6 +1002,7 @@ int main(int argc, char *argv[]) {
         debug_print("present scene end\n");
 
         SDL_Delay(0);
+        debug_print("end loop\n");
     }
     debug_print("saving...\n");
     write();
@@ -930,6 +1012,7 @@ int main(int argc, char *argv[]) {
         free(TRAVEL_CHAR_BUF);
     /* delete nodes recursively, starting from root */
     deleteNode(graph.root);
+    debug_print("deleted nodes\n");
 
 
     SDL_DestroyRenderer( app.renderer );
