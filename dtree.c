@@ -44,9 +44,9 @@ typedef struct DoublePoint DoublePoint;
 typedef struct App App;
 
 enum Mode{
-	DEFAULT,
-	EDIT,
-	TRAVEL
+    DEFAULT,
+    EDIT,
+    TRAVEL
 };
 
 struct Point {
@@ -167,7 +167,7 @@ char* getModeName(){
 }
 
 inline void requestRender() {
-	g_do_render = true;
+    g_do_render = true;
 }
 
 double clip(double num, double min, double max){
@@ -278,14 +278,14 @@ void doKeyUp(SDL_KeyboardEvent *event) {
     switch(event->keysym.sym) {
         case SDLK_ESCAPE:
             switch2Default();
-			requestRender();
+            requestRender();
             return;
         case SDLK_BACKSPACE:
             if ( graph.selected->text_len > 0 ){
                 graph.selected->text_len--;
                 graph.selected->text[graph.selected->text_len] = '\0';
             }
-			requestRender();
+            requestRender();
             return;
         case SDLK_MINUS:
             LAYER_MARGIN /= SCALE;
@@ -293,7 +293,7 @@ void doKeyUp(SDL_KeyboardEvent *event) {
             THICKNESS = (int) THICKNESS / SCALE;
             LEFT_BOUNDARY -= SIDE_MARGIN * SCALE;
             RIGHT_BOUNDARY -= SCALE;
-			requestRender();
+            requestRender();
             return;
         case SDLK_EQUALS:
             LAYER_MARGIN *= SCALE;
@@ -301,7 +301,7 @@ void doKeyUp(SDL_KeyboardEvent *event) {
             THICKNESS = (int) THICKNESS * SCALE;
             LEFT_BOUNDARY += SCALE;
             RIGHT_BOUNDARY += SCALE;
-			requestRender();
+            requestRender();
             return;
     }
 
@@ -311,37 +311,37 @@ void doKeyUp(SDL_KeyboardEvent *event) {
     switch(event->keysym.sym) {
         case SDLK_o:
             makeChild(graph.selected);
-			requestRender();
+            requestRender();
             return;
         case SDLK_d:
             removeNodeFromGraph(graph.selected);
-			requestRender();
+            requestRender();
             return;
         case SDLK_h:
             if ( graph.selected->children->num >= 1 ){
                 graph.selected = graph.selected->children->array[0];
             }
-			requestRender();
+            requestRender();
             return;
         case SDLK_l:
             if ( graph.selected->children->num >= 1 ){
                 graph.selected = graph.selected->children->array[graph.selected->children->num-1];
             }
-			requestRender();
+            requestRender();
             return;
         case SDLK_k:
             graph.selected = graph.selected->p;
-			requestRender();
+            requestRender();
             return;
         case SDLK_t:
             mode = TRAVEL;
             debug_print("boop\n");
             populateTravelText(graph.selected);
-			requestRender();
+            requestRender();
             return;
         case SDLK_e:
             mode = EDIT;
-			requestRender();
+            requestRender();
             return;
     }
     break; // end of Default bindings
@@ -349,12 +349,12 @@ void doKeyUp(SDL_KeyboardEvent *event) {
     switch(event->keysym.sym) {
         case SDLK_t:
             switch2Default();
-			requestRender();
+            requestRender();
             return;
         case SDLK_e:
             switch2Default(); // exiting travel mode requires freeing some memory
             mode = EDIT;
-			requestRender();
+            requestRender();
             return;
     }
     break; // end of Travel bindings
@@ -376,7 +376,7 @@ void eventHandler(SDL_Event *event) {
                     debug_print("edit.text[0]: %c\n", event->edit.text[0]);
                     debug_print("first: %c\n", graph.selected->text[0]);
                     debug_print("new text, len %d: %s\n", graph.selected->text_len, graph.selected->text);
-					requestRender();
+                    requestRender();
                 }
             }
             if (mode == TRAVEL){
@@ -413,7 +413,7 @@ void eventHandler(SDL_Event *event) {
                         debug_print("changing nodes\n");
                     }
                 }
-				requestRender(); // Don't know the best time for this
+                requestRender(); // Don't know the best time for this
                 debug_print("handled travel input\n");
             }
             break;
@@ -434,7 +434,7 @@ void eventHandler(SDL_Event *event) {
                 debug_print("window resized from %dx%d to %dx%d\n", app.window_size.x, app.window_size.y, w, h);
                 app.window_size.x = w;
                 app.window_size.y = h;
-				requestRender();
+                requestRender();
             }
             break;
 
@@ -1019,16 +1019,16 @@ int main(int argc, char *argv[]) {
         debug_print("event handler done\n");
 
         if (g_do_render) {
-			debug_print("prepare scene start\n");
-			prepareScene();
-			debug_print("prepare scene end\n");
+            debug_print("prepare scene start\n");
+            prepareScene();
+            debug_print("prepare scene end\n");
 
-			debug_print("present scene start\n");
-			presentScene();
-			debug_print("present scene end\n");
+            debug_print("present scene start\n");
+            presentScene();
+            debug_print("present scene end\n");
 
-			g_do_render = false;
-		}
+            g_do_render = false;
+        }
 
         SDL_Delay(0);
         debug_print("end loop\n");
