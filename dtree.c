@@ -343,6 +343,7 @@ void doKeyUp(SDL_KeyboardEvent *event) {
 }
 
 void eventHandler(SDL_Event *event) {
+    bool doesDraw = true;
     switch (event->type)
     {
         case SDL_TEXTINPUT:
@@ -404,7 +405,6 @@ void eventHandler(SDL_Event *event) {
 
         case SDL_WINDOWEVENT:
             if(event->window.event == SDL_WINDOWEVENT_RESIZED) {
-
                 int w, h;
                 SDL_GetWindowSize(app.window, &w, &h);
                 debug_print("window resized from %dx%d to %dx%d\n", app.window_size.x, app.window_size.y, w, h);
@@ -418,7 +418,17 @@ void eventHandler(SDL_Event *event) {
             break;
 
         default:
+            doesDraw = false;
             break;
+    }
+    if (doesDraw) {
+        debug_print("prepare scene start\n");
+        prepareScene();
+        debug_print("prepare scene end\n");
+
+        debug_print("present scene start\n");
+        presentScene();
+        debug_print("present scene end\n");
     }
 }
 
@@ -993,13 +1003,6 @@ int main(int argc, char *argv[]) {
         eventHandler(&e);
         debug_print("event handler done\n");
 
-        debug_print("prepare scene start\n");
-        prepareScene();
-        debug_print("prepare scene end\n");
-
-        debug_print("present scene start\n");
-        presentScene();
-        debug_print("present scene end\n");
 
         SDL_Delay(0);
         debug_print("end loop\n");
