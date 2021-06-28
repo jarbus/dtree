@@ -91,6 +91,7 @@ struct Graph {
 static App app;
 static Graph graph;
 static enum Mode mode = DEFAULT;
+static bool g_do_render = true;
 
 static const char* TRAVEL_CHARS = "asdfghjl;\0";
 // radius and thickness of node ring
@@ -126,6 +127,7 @@ static SDL_Color TRAVEL_COLOR = {255, 0, 0};
 
 
 double clip(double num, double min, double max);
+void requestRender();
 void initSDL();
 void doKeyDown(SDL_KeyboardEvent *event);
 void doKeyUp(SDL_KeyboardEvent *event);
@@ -164,6 +166,9 @@ char* getModeName(){
     }
 }
 
+inline void requestRender() {
+	g_do_render = true;
+}
 
 double clip(double num, double min, double max){
     if ( num < min )
@@ -273,12 +278,14 @@ void doKeyUp(SDL_KeyboardEvent *event) {
     switch(event->keysym.sym) {
         case SDLK_ESCAPE:
             switch2Default();
+			requestRender();
             return;
         case SDLK_BACKSPACE:
             if ( graph.selected->text_len > 0 ){
                 graph.selected->text_len--;
                 graph.selected->text[graph.selected->text_len] = '\0';
             }
+			requestRender();
             return;
         case SDLK_MINUS:
             LAYER_MARGIN /= SCALE;
@@ -286,6 +293,7 @@ void doKeyUp(SDL_KeyboardEvent *event) {
             THICKNESS = (int) THICKNESS / SCALE;
             LEFT_BOUNDARY -= SIDE_MARGIN * SCALE;
             RIGHT_BOUNDARY -= SCALE;
+			requestRender();
             return;
         case SDLK_EQUALS:
             LAYER_MARGIN *= SCALE;
@@ -293,6 +301,7 @@ void doKeyUp(SDL_KeyboardEvent *event) {
             THICKNESS = (int) THICKNESS * SCALE;
             LEFT_BOUNDARY += SCALE;
             RIGHT_BOUNDARY += SCALE;
+			requestRender();
             return;
     }
 
@@ -302,30 +311,37 @@ void doKeyUp(SDL_KeyboardEvent *event) {
     switch(event->keysym.sym) {
         case SDLK_o:
             makeChild(graph.selected);
+			requestRender();
             return;
         case SDLK_d:
             removeNodeFromGraph(graph.selected);
+			requestRender();
             return;
         case SDLK_h:
             if ( graph.selected->children->num >= 1 ){
                 graph.selected = graph.selected->children->array[0];
             }
+			requestRender();
             return;
         case SDLK_l:
             if ( graph.selected->children->num >= 1 ){
                 graph.selected = graph.selected->children->array[graph.selected->children->num-1];
             }
+			requestRender();
             return;
         case SDLK_k:
             graph.selected = graph.selected->p;
+			requestRender();
             return;
         case SDLK_t:
             mode = TRAVEL;
             debug_print("boop\n");
             populateTravelText(graph.selected);
+			requestRender();
             return;
         case SDLK_e:
             mode = EDIT;
+			requestRender();
             return;
     }
     break; // end of Default bindings
@@ -333,10 +349,12 @@ void doKeyUp(SDL_KeyboardEvent *event) {
     switch(event->keysym.sym) {
         case SDLK_t:
             switch2Default();
+			requestRender();
             return;
         case SDLK_e:
             switch2Default(); // exiting travel mode requires freeing some memory
             mode = EDIT;
+			requestRender();
             return;
     }
     break; // end of Travel bindings
@@ -358,6 +376,7 @@ void eventHandler(SDL_Event *event) {
                     debug_print("edit.text[0]: %c\n", event->edit.text[0]);
                     debug_print("first: %c\n", graph.selected->text[0]);
                     debug_print("new text, len %d: %s\n", graph.selected->text_len, graph.selected->text);
+					requestRender();
                 }
             }
             if (mode == TRAVEL){
@@ -366,7 +385,7 @@ void eventHandler(SDL_Event *event) {
                 // if hardcode k to be parent
                 if ( event->edit.text[0] == 'k' ){
                     graph.selected = graph.selected->p;
-                    prepareScene();
+                    /* prepareScene(); */
                     populateTravelText(graph.selected);
                 }
                 // check if current travel buffer doesn't exceed max chars
@@ -389,11 +408,12 @@ void eventHandler(SDL_Event *event) {
                         debug_print("freed travel chars\n");
                         TRAVEL_CHAR_BUF = calloc(MAX_NUM_TRAVEL_CHARS, sizeof(char));
                         TRAVEL_CHAR_I = 0;
-                        prepareScene();
+                        /* prepareScene(); */
                         populateTravelText(graph.selected);
                         debug_print("changing nodes\n");
                     }
                 }
+				requestRender(); // Don't know the best time for this
                 debug_print("handled travel input\n");
             }
             break;
@@ -414,6 +434,7 @@ void eventHandler(SDL_Event *event) {
                 debug_print("window resized from %dx%d to %dx%d\n", app.window_size.x, app.window_size.y, w, h);
                 app.window_size.x = w;
                 app.window_size.y = h;
+				requestRender();
             }
             break;
 
@@ -997,13 +1018,17 @@ int main(int argc, char *argv[]) {
         eventHandler(&e);
         debug_print("event handler done\n");
 
-        debug_print("prepare scene start\n");
-        prepareScene();
-        debug_print("prepare scene end\n");
+        if (g_do_render) {
+			debug_print("prepare scene start\n");
+			prepareScene();
+			debug_print("prepare scene end\n");
 
-        debug_print("present scene start\n");
-        presentScene();
-        debug_print("present scene end\n");
+			debug_print("present scene start\n");
+			presentScene();
+			debug_print("present scene end\n");
+
+			g_do_render = false;
+		}
 
         SDL_Delay(0);
         debug_print("end loop\n");
