@@ -43,7 +43,11 @@ typedef struct Point Point;
 typedef struct DoublePoint DoublePoint;
 typedef struct App App;
 
-enum Mode{Default, Edit, Travel};
+enum Mode{
+	DEFAULT,
+	EDIT,
+	TRAVEL
+};
 
 struct Point {
     int x;
@@ -86,7 +90,7 @@ struct Graph {
 
 static App app;
 static Graph graph;
-static enum Mode mode = Default;
+static enum Mode mode = DEFAULT;
 
 static const char* TRAVEL_CHARS = "asdfghjl;\0";
 // radius and thickness of node ring
@@ -153,9 +157,9 @@ void switch2Default();
 
 char* getModeName(){
     switch(mode) {
-        case Default: return "DEFAULT";
-        case Edit: return "EDIT";
-        case Travel: return "TRAVEL";
+        case DEFAULT: return "DEFAULT";
+        case EDIT: return "EDIT";
+        case TRAVEL: return "TRAVEL";
         default: return NULL;
     }
 }
@@ -241,13 +245,13 @@ void initSDL() {
 
 void switch2Default(){
     debug_print("switching to default\n");
-    if ( mode == Travel ){
+    if ( mode == TRAVEL ){
         TRAVEL_NODES = freeArray (TRAVEL_NODES);
         TRAVEL_CHAR_I = 0;
         if ( TRAVEL_CHAR_BUF ) free(TRAVEL_CHAR_BUF);
         TRAVEL_CHAR_BUF = calloc(MAX_NUM_TRAVEL_CHARS, sizeof(char));
     }
-    mode = Default;
+    mode = DEFAULT;
     debug_print("switched to default %p\n", TRAVEL_NODES);
 }
 
@@ -294,7 +298,7 @@ void doKeyUp(SDL_KeyboardEvent *event) {
 
     // mode-specific key-bindings
     switch(mode) {
-    case Default:
+    case DEFAULT:
     switch(event->keysym.sym) {
         case SDLK_o:
             makeChild(graph.selected);
@@ -316,27 +320,27 @@ void doKeyUp(SDL_KeyboardEvent *event) {
             graph.selected = graph.selected->p;
             return;
         case SDLK_t:
-            mode = Travel;
+            mode = TRAVEL;
             debug_print("boop\n");
             populateTravelText(graph.selected);
             return;
         case SDLK_e:
-            mode = Edit;
+            mode = EDIT;
             return;
     }
     break; // end of Default bindings
-    case Travel:
+    case TRAVEL:
     switch(event->keysym.sym) {
         case SDLK_t:
             switch2Default();
             return;
         case SDLK_e:
             switch2Default(); // exiting travel mode requires freeing some memory
-            mode = Edit;
+            mode = EDIT;
             return;
     }
     break; // end of Travel bindings
-    case Edit: {
+    case EDIT: {
         return; // edit-mode specific key-binds don't really exist
     }
     }
@@ -346,7 +350,7 @@ void eventHandler(SDL_Event *event) {
     switch (event->type)
     {
         case SDL_TEXTINPUT:
-            if (mode == Edit){
+            if (mode == EDIT){
 
                 if ( graph.selected->text_len < MAX_TEXT_LEN ){
                     debug_print("Adding text\n");
@@ -356,7 +360,7 @@ void eventHandler(SDL_Event *event) {
                     debug_print("new text, len %d: %s\n", graph.selected->text_len, graph.selected->text);
                 }
             }
-            if (mode == Travel){
+            if (mode == TRAVEL){
                 // go to node specified by travel chars
                 debug_print("handling travel input: %d/%d\n", TRAVEL_CHAR_I, MAX_NUM_TRAVEL_CHARS);
                 // if hardcode k to be parent
@@ -507,7 +511,7 @@ void drawNode(Node* node) {
     /* render node text */
     renderMessage(node->text, message_pos, TEXTBOX_WIDTH_SCALE*node->text_len, TEXTBOX_HEIGHT, EDIT_COLOR);
     /* render travel text */
-    if ( mode == Travel ){
+    if ( mode == TRAVEL ){
         if (strlen(node->travel_text) > 0){
             // position char in center of node
             message_pos.x = (int) ((node->pos.x) * app.window_size.x)  - (int)((TEXTBOX_WIDTH_SCALE) / 2) - RADIUS;
@@ -777,7 +781,7 @@ void makeGraph(){
     graph.num_nodes = 0;
     graph.selected = graph.root;
     graph.root->p = graph.root;
-    mode = Default;
+    mode = DEFAULT;
 }
 
 
