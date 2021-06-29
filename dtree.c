@@ -1,20 +1,15 @@
 // TODO
 // - travel mode
-//     - better population of text
-//       - travel_text is getting freed somewhere/somehow
-//     - issue: handle invalid characters properly
 //     - qol: highlight matching characters as you fill them in
 // - make parent visible
 // - add way to edit file name in app
 // - add, copy, paste functionality
+// - delete mode
 // NOTE:
 // SDLK is software character, SCANCODE is hardware
 //
 // https://www.parallelrealities.co.uk/tutorials/#shooter
 // https://lazyfoo.net/tutorials/SDL/32_text_input_and_clipboard_handling/index.php
-// marks: `s for structs
-//          `f for functions
-//          `m for main function
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_ttf.h>
@@ -920,7 +915,9 @@ void endAtNewline(char* string, int textlen){
 }
 
 void readfile(){
-     FILE* fp = fopen(FILENAME, "r");
+    FILE* fp = fopen(FILENAME, "r");
+    if ( !fp )
+        return;
     /* buffer to store lines */
     char* buf = calloc(BUF_SIZE, sizeof(char));
     /* load first line of file */
