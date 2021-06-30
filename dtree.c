@@ -1,8 +1,10 @@
 // TODO
+// - generalize buffer editing, apply to hint buffer
+//   - add way to edit file name in app
+// - generalize hint modes
 // - travel mode
-//     - qol: highlight matching characters as you fill them in
-// - make parent visible
-// - add way to edit file name in app
+//   - qol: highlight matching characters as you fill them in
+// - better drawing algs - durkin
 // - add, copy, paste functionality
 // - delete mode
 // NOTE:
