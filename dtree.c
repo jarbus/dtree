@@ -693,6 +693,12 @@ void prepareScene() {
     mode_text_pos.y = (int) ((0.0) * app.window_size.y);
     debug_print("rendering %s\n", getModeName());
     renderMessage(getModeName(), mode_text_pos, strlen(getModeName()) * TEXTBOX_WIDTH_SCALE, TEXTBOX_HEIGHT, EDIT_COLOR);
+
+    //Draw travel buffer
+    Point travel_buf_pos;
+    travel_buf_pos.x = (int) ((1.0 * app.window_size.x) - (TRAVEL_CHAR_LEN * TEXTBOX_WIDTH_SCALE));
+    travel_buf_pos.y = (int) ((0.9) * app.window_size.y);
+    renderMessage(TRAVEL_CHAR_BUF, travel_buf_pos, TRAVEL_CHAR_LEN * TEXTBOX_WIDTH_SCALE, TEXTBOX_HEIGHT, TRAVEL_COLOR);
 }
 
 /* actually renders the screen */
