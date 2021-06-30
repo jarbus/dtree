@@ -103,15 +103,18 @@ static int FONT_SIZE = 40;
 // width and heigh of text boxes
 static int TEXTBOX_WIDTH_SCALE = 40;
 static int TEXTBOX_HEIGHT = 100;
-static int MAX_TEXT_LEN = 32;
+static int MAX_TEXT_LEN = 128;
 // number of characters for travel hint text
 static int MAX_NUM_TRAVEL_CHARS = 2;
 // current idx of travel char
-static int TRAVEL_CHAR_I = 0;
+static int TRAVEL_CHAR_LEN = 0;
 // array of all nodes to be traveled to
 static Array* TRAVEL_NODES;
 // buffer to store current travel hint progress
 static char* TRAVEL_CHAR_BUF;
+static char* CURRENT_BUFFER;
+static int CURRENT_BUFFER_SIZE;
+static int* CURRENT_BUFFER_LEN;
 static char* FILENAME;
 static unsigned int BUF_SIZE = 128;
 static SDL_Color EDIT_COLOR = {255, 255, 255};
@@ -147,6 +150,8 @@ void clearTravelText();
 void populateTravelText(Node* node);
 char* getModeName();
 void switch2Default();
+void switch2Edit();
+void switch2Travel();
 
 char* getModeName(){
     switch(mode) {
@@ -240,12 +245,30 @@ void switch2Default(){
     debug_print("switching to default\n");
     if ( mode == Travel ){
         TRAVEL_NODES = freeArray (TRAVEL_NODES);
-        TRAVEL_CHAR_I = 0;
+        TRAVEL_CHAR_LEN = 0;
         if ( TRAVEL_CHAR_BUF ) free(TRAVEL_CHAR_BUF);
         TRAVEL_CHAR_BUF = calloc(MAX_NUM_TRAVEL_CHARS, sizeof(char));
     }
+    CURRENT_BUFFER = NULL;
+    CURRENT_BUFFER_SIZE = -1;
     mode = Default;
     debug_print("switched to default %p\n", TRAVEL_NODES);
+}
+
+void switch2Edit(){
+    mode = Edit;
+    CURRENT_BUFFER = graph.selected->text;
+    CURRENT_BUFFER_SIZE = MAX_TEXT_LEN;
+    CURRENT_BUFFER_LEN = &graph.selected->text_len;
+}
+
+void switch2Travel(){
+    mode = Travel;
+    debug_print("boop\n");
+    populateTravelText(graph.selected);
+    CURRENT_BUFFER = TRAVEL_CHAR_BUF;
+    CURRENT_BUFFER_LEN = & TRAVEL_CHAR_LEN;
+    CURRENT_BUFFER_SIZE = MAX_NUM_TRAVEL_CHARS;
 }
 
 void doKeyDown(SDL_KeyboardEvent *event) {
@@ -268,9 +291,8 @@ void doKeyUp(SDL_KeyboardEvent *event) {
             switch2Default();
             return;
         case SDLK_BACKSPACE:
-            if ( graph.selected->text_len > 0 ){
-                graph.selected->text_len--;
-                graph.selected->text[graph.selected->text_len] = '\0';
+            if ( CURRENT_BUFFER && CURRENT_BUFFER_LEN >= 0){
+                CURRENT_BUFFER[--*CURRENT_BUFFER_LEN] = '\0';
             }
             return;
         case SDLK_MINUS:
@@ -313,12 +335,10 @@ void doKeyUp(SDL_KeyboardEvent *event) {
             graph.selected = graph.selected->p;
             return;
         case SDLK_t:
-            mode = Travel;
-            debug_print("boop\n");
-            populateTravelText(graph.selected);
+            switch2Travel();
             return;
         case SDLK_e:
-            mode = Edit;
+            switch2Edit();
             return;
     }
     break; // end of Default bindings
@@ -329,7 +349,7 @@ void doKeyUp(SDL_KeyboardEvent *event) {
             return;
         case SDLK_e:
             switch2Default(); // exiting travel mode requires freeing some memory
-            mode = Edit;
+            switch2Edit();
             return;
     }
     break; // end of Travel bindings
@@ -343,49 +363,50 @@ void eventHandler(SDL_Event *event) {
     switch (event->type)
     {
         case SDL_TEXTINPUT:
-            if (mode == Edit){
-
-                if ( graph.selected->text_len < MAX_TEXT_LEN ){
-                    debug_print("Adding text\n");
-                    graph.selected->text[graph.selected->text_len++] = event->edit.text[0];
-                    debug_print("edit.text[0]: %c\n", event->edit.text[0]);
-                    debug_print("first: %c\n", graph.selected->text[0]);
-                    debug_print("new text, len %d: %s\n", graph.selected->text_len, graph.selected->text);
+            if ( CURRENT_BUFFER && *CURRENT_BUFFER_LEN < CURRENT_BUFFER_SIZE ){
+                debug_print("Adding text\n");
+                int add_text = 1;
+                // skip adding to buffer for travel mode if not a valid travel char
+                if ( mode == Travel ){
+                    add_text = 0;
+                    for (int i = 0; i < strlen(TRAVEL_CHARS); ++i){
+                        if ( TRAVEL_CHARS[i] == event->edit.text[0] ){
+                            add_text = 1;
+                            break;
+                        }
+                    }
                 }
+
+                if ( add_text )
+                    CURRENT_BUFFER[(*CURRENT_BUFFER_LEN)++] = event->edit.text[0];
+                debug_print("edit.text[0]: %c\n", event->edit.text[0]);
+                debug_print("first: %c\n", graph.selected->text[0]);
+                debug_print("new text, len %d: %s\n", graph.selected->text_len, graph.selected->text);
             }
             if (mode == Travel){
                 // go to node specified by travel chars
-                debug_print("handling travel input: %d/%d\n", TRAVEL_CHAR_I, MAX_NUM_TRAVEL_CHARS);
-                // if hardcode k to be parent
+                debug_print("handling travel input: %d/%d\n", TRAVEL_CHAR_LEN, MAX_NUM_TRAVEL_CHARS);
+                // hardcode k to be parent
                 if ( event->edit.text[0] == 'k' ){
                     graph.selected = graph.selected->p;
                     prepareScene();
                     populateTravelText(graph.selected);
                 }
-                // check if current travel buffer doesn't exceed max chars
-                if ( TRAVEL_CHAR_I >= MAX_NUM_TRAVEL_CHARS )
-                    break;
-                for (int i = 0; i < strlen(TRAVEL_CHARS); ++i) {
-                    if ( TRAVEL_CHARS[i] != event->edit.text[0] )
+                // check if any nodes travel text matches current input
+                for (int i = 0; i < TRAVEL_NODES->num; ++i) {
+                    // continue if travel buffer != any travel text
+                    if ( strcmp(TRAVEL_CHAR_BUF, TRAVEL_NODES->array[i]->travel_text) != 0 )
                         continue;
-                    // if character is valid travel char, add it to buffer
-                    TRAVEL_CHAR_BUF[TRAVEL_CHAR_I++] = event->edit.text[0];
-                    // check if any nodes travel text matches current input
-                    for (int i = 0; i < TRAVEL_NODES->num; ++i) {
-                        // continue if travel buffer != any travel text
-                        if ( strcmp(TRAVEL_CHAR_BUF, TRAVEL_NODES->array[i]->travel_text) != 0 )
-                            continue;
-                        graph.selected = TRAVEL_NODES->array[i];
-                        // reset travel text
-                        debug_print("freeing travel chars\n");
-                        if ( TRAVEL_CHAR_BUF ) free(TRAVEL_CHAR_BUF);
-                        debug_print("freed travel chars\n");
-                        TRAVEL_CHAR_BUF = calloc(MAX_NUM_TRAVEL_CHARS, sizeof(char));
-                        TRAVEL_CHAR_I = 0;
-                        prepareScene();
-                        populateTravelText(graph.selected);
-                        debug_print("changing nodes\n");
-                    }
+                    graph.selected = TRAVEL_NODES->array[i];
+                    // reset travel text
+                    debug_print("freeing travel chars\n");
+                    if ( TRAVEL_CHAR_BUF ) free(TRAVEL_CHAR_BUF);
+                    debug_print("freed travel chars\n");
+                    TRAVEL_CHAR_BUF = calloc(MAX_NUM_TRAVEL_CHARS, sizeof(char));
+                    TRAVEL_CHAR_LEN = 0;
+                    prepareScene();
+                    populateTravelText(graph.selected);
+                    debug_print("changing nodes\n");
                 }
                 debug_print("handled travel input\n");
             }
@@ -945,9 +966,9 @@ void readfile(){
         level = countTabs(ret);
         /* create new child node */
         hierarchy[level] = makeChild(hierarchy[level-1]);
-        /* copy current line to child node */
+        /* copy current line to child node, offset by number of tabs */
         strcpy(hierarchy[level]->text, ret + level);
-        hierarchy[level]->text_len = strlen(ret);
+        hierarchy[level]->text_len = strlen(ret)-1; // for some reason I need to have a -1 here
     }
     fclose(fp);
     free(buf);
