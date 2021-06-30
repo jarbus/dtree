@@ -104,18 +104,16 @@ static int FONT_SIZE = 40;
 static int TEXTBOX_WIDTH_SCALE = 40;
 static int TEXTBOX_HEIGHT = 100;
 static int MAX_TEXT_LEN = 128;
-// number of characters for travel hint text
-static int MAX_NUM_TRAVEL_CHARS = 2;
 // current idx of travel char
-static int TRAVEL_CHAR_LEN = 0;
 // array of all nodes to be traveled to
 static Array* TRAVEL_NODES;
 // buffer to store current travel hint progress
 static char* TRAVEL_CHAR_BUF;
+static int TRAVEL_CHAR_LEN = 0, MAX_NUM_TRAVEL_CHARS = 2;
 static char* CURRENT_BUFFER;
-static int CURRENT_BUFFER_SIZE;
-static int* CURRENT_BUFFER_LEN;
+static int CURRENT_BUFFER_SIZE, *CURRENT_BUFFER_LEN;
 static char* FILENAME;
+static int FILENAME_SIZE=64, FILENAME_LEN;
 static unsigned int BUF_SIZE = 128;
 static SDL_Color EDIT_COLOR = {255, 255, 255};
 static SDL_Color TRAVEL_COLOR = {255, 0, 0};
@@ -262,6 +260,13 @@ void switch2Edit(){
     CURRENT_BUFFER_LEN = &graph.selected->text_len;
 }
 
+void switch2FilenameEdit(){
+    mode = Edit;
+    CURRENT_BUFFER = FILENAME;
+    CURRENT_BUFFER_SIZE = FILENAME_SIZE;
+    CURRENT_BUFFER_LEN = &FILENAME_LEN;
+}
+
 void switch2Travel(){
     mode = Travel;
     debug_print("boop\n");
@@ -339,6 +344,9 @@ void doKeyUp(SDL_KeyboardEvent *event) {
             return;
         case SDLK_e:
             switch2Edit();
+            return;
+        case SDLK_r:
+            switch2FilenameEdit();
             return;
     }
     break; // end of Default bindings
@@ -502,9 +510,7 @@ void drawRing(SDL_Renderer *surface, int n_cx, int n_cy, int radius, int thickne
 
 /* Renders each node, then renders it's children and draws lines to the children */
 void drawNode(Node* node) {
-
-    if ( node == NULL )
-        return;
+    if ( node == NULL ) return;
 
     int x = (int) ((node->pos.x) * app.window_size.x);
     int y = (int) ((node->pos.y) * app.window_size.y);
@@ -802,8 +808,6 @@ void makeGraph(){
 void clearTravelText() {
     debug_print("start clearTravelText()\n");
     // return if already freed
-    if (TRAVEL_NODES == NULL)
-        debug_print("travel nodes %p\n", TRAVEL_NODES);
     if (TRAVEL_NODES == NULL || TRAVEL_NODES->array == NULL){
         return;
     }
@@ -833,11 +837,9 @@ void populateTravelNodes(Node* node){
         return;
     debug_print("adding travel node: %fx%f\n", node->pos.x, node->pos.y);
     if ( 0.0 < node->pos.x && node->pos.x < 1.0 && 0.0 < node->pos.y && node->pos.y < 1.0 ){
-        debug_print("hello\n");
         insertArray(TRAVEL_NODES, node);
         debug_print("added\n");
     }
-    debug_print("hello2\n");
     for (int i = 0; i < node->children->num; ++i) {
         debug_print("going to next child\n");
         populateTravelNodes(node->children->array[i]);
@@ -984,13 +986,14 @@ int main(int argc, char *argv[]) {
 
     makeGraph();
 
+    FILENAME = calloc(64, sizeof(char));
     if ( argc > 1 ){
-        FILENAME = argv[1];
+        strcpy(FILENAME, argv[1]);
         readfile();
     }
-    else{
-        FILENAME = "unnamed.txt";
-    }
+    else
+        strcpy(FILENAME, "unnamed.txt");
+    FILENAME_LEN = strlen(FILENAME);
 
     TRAVEL_CHAR_BUF = calloc(MAX_NUM_TRAVEL_CHARS + 1, sizeof(char));
     /* gracefully close windows on exit of program */
@@ -1030,6 +1033,7 @@ int main(int argc, char *argv[]) {
 
     if (TRAVEL_CHAR_BUF)
         free(TRAVEL_CHAR_BUF);
+    free(FILENAME);
     /* delete nodes recursively, starting from root */
     deleteNode(graph.root);
     debug_print("deleted nodes\n");
