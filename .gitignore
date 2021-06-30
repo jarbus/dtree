@@ -5,8 +5,11 @@ README.md
 ttf-demo/
 SDL2_ttf-2.0.15/
 build-and-run
-test.txt
+*.txt
+*.log
+*.py
 
 # LSP
 compile_commands.json
 .clangd/
+
