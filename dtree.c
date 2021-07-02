@@ -1,14 +1,16 @@
 // TODO
 // - hint mode
-//   - qol: highlight matching characters as you fill them in
+//   - qol: remove hint text that doesn't match current buffer
+//   - add, copy, paste functionality
 // - better drawing algs - durkin
-// - add, copy, paste functionality
-// - optimization, reduce memory usage
+//   - switch between global and local view
+//                      ^ good alg  ^ conditioned on graph.selected
+//                                    maybe a semi circle?????
+//   - fix tree drawing for global
+// - optimization, reduce memory usage - xie
+//   - set up base case example
 // NOTE:
 // SDLK is software character, SCANCODE is hardware
-//
-// https://www.parallelrealities.co.uk/tutorials/#shooter
-// https://lazyfoo.net/tutorials/SDL/32_text_input_and_clipboard_handling/index.php
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_ttf.h>
@@ -36,8 +38,9 @@ typedef struct Graph Graph;
 typedef struct Point Point;
 typedef struct DoublePoint DoublePoint;
 typedef struct App App;
+typedef struct Buffer Buffer;
 
-enum Mode{Default, Edit, Travel, Delete};
+enum Mode{Default, Edit, FilenameEdit, Travel, Delete};
 
 struct Point {
     int x;
@@ -62,13 +65,18 @@ struct Array {
     size_t size; /* max size of array */
 };
 
+struct Buffer{
+    char* buf;
+    int len;
+    int size;
+};
+
 
 struct Node {
     struct Node* p;
     struct Array* children;
     struct DoublePoint pos;
-    char* text;
-    int text_len;
+    struct Buffer text;
     char* hint_text;
 };
 
@@ -104,13 +112,9 @@ static int MAX_TEXT_LEN = 128;
 // array of all nodes to be hinted to
 static Array* HINT_NODES;
 // buffer to store current hint progress
-static char* HINT_CHAR_BUF;
-static int HINT_CHAR_LEN = 0, MAX_NUM_HINT_CHARS = 2;
-static char* CURRENT_BUFFER;
-static int CURRENT_BUFFER_SIZE, *CURRENT_BUFFER_LEN;
-static char* FILENAME;
-static int FILENAME_SIZE=64, FILENAME_LEN;
-static unsigned int BUF_SIZE = 128;
+static Buffer* CURRENT_BUFFER;
+static Buffer HINT_BUFFER = {NULL, 0, 2};
+static Buffer FILENAME_BUFFER = {NULL, 0, 64};
 static SDL_Color EDIT_COLOR = {255, 255, 255};
 static SDL_Color HINT_COLOR = {255, 0, 0};
 
@@ -132,6 +136,7 @@ char* getModeName();
 void handleTextInput(SDL_Event *event);
 Array* initArray(size_t initialSize);
 void initSDL();
+bool isHintMode(enum Mode mode_param);
 Node* makeNode();
 Node* makeChild(Node* parent);
 void populateHintText(Node* node);
@@ -144,33 +149,31 @@ void* removeFromArray(Array *a, Node* node);
 void removeNodeFromGraph(Node* node);
 void renderMessage(char* message, Point pos, double width, double height, SDL_Color color);
 void set_pixel(SDL_Renderer *rend, int x, int y, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
-void switch2Edit();
-void switch2Default();
-void switch2Travel();
+void switch2(enum Mode to);
 void update_pos_children(Node* node, double leftmost_bound, double rightmost_bound, double level);
 void write();
 void writeChildrenStrings(FILE* file, Node* node, int level);
 
 void readfile(){
-    FILE* fp = fopen(FILENAME, "r");
+    FILE* fp = fopen(FILENAME_BUFFER.buf, "r");
     if ( !fp )
         return;
     /* buffer to store lines */
-    char* buf = calloc(BUF_SIZE, sizeof(char));
+    char* buf = calloc(MAX_TEXT_LEN, sizeof(char));
     /* load first line of file */
-    char* ret = fgets(buf, BUF_SIZE, fp);
+    char* ret = fgets(buf, MAX_TEXT_LEN, fp);
     /* keep references to all nodes that can have children added,
      * one per each level */
-    Node** hierarchy = calloc(BUF_SIZE, sizeof(Node*));
+    Node** hierarchy = calloc(MAX_TEXT_LEN, sizeof(Node*));
     unsigned int level = 0;
     /* Load graph root manually */
     hierarchy[0] = graph.root;
     endAtNewline(ret, strlen(ret));
-    strcpy(graph.root->text, ret);
-    graph.root->text_len = strlen(ret);
+    strcpy(graph.root->text.buf, ret);
+    graph.root->text.len = strlen(ret);
     while ( true ){
         /* loads next line */
-        ret = fgets(buf, BUF_SIZE, fp);
+        ret = fgets(buf, MAX_TEXT_LEN, fp);
         /* reached EOF */
         if ( ret != buf )
             break;
@@ -181,8 +184,8 @@ void readfile(){
         /* create new child node */
         hierarchy[level] = makeChild(hierarchy[level-1]);
         /* copy current line to child node, offset by number of tabs */
-        strcpy(hierarchy[level]->text, ret + level);
-        hierarchy[level]->text_len = strlen(ret)-1; // for some reason I need to have a -1 here
+        strcpy(hierarchy[level]->text.buf, ret + level);
+        hierarchy[level]->text.len = strlen(ret)-1; // for some reason I need to have a -1 here
     }
     fclose(fp);
     free(buf);
@@ -193,15 +196,15 @@ void readfile(){
 void writeChildrenStrings(FILE* file, Node* node, int level){
     for(int i=0; i<level;i++)
         fprintf(file, "\t");
-    fprintf(file, "%s\n", node->text);
+    fprintf(file, "%s\n", node->text.buf);
     for (int i=0; i<node->children->num; i++){
         writeChildrenStrings(file, node->children->array[i], level + 1);
     }
 }
 
 void write(){
-    if ( FILENAME == NULL ) return;
-     FILE* output = fopen(FILENAME, "w");
+    if ( FILENAME_BUFFER.buf == NULL ) return;
+     FILE* output = fopen(FILENAME_BUFFER.buf, "w");
     debug_print("write open done\n");
     writeChildrenStrings(output, graph.root, 0);
     fclose(output);
@@ -217,8 +220,8 @@ char* getModeName(){
     }
 }
 
-bool isHintMode(){
-    switch(mode){
+bool isHintMode(enum Mode mode_param){
+    switch(mode_param){
         case Travel: return true;
         case Delete: return true;
         default: return false;
@@ -302,49 +305,39 @@ void initSDL() {
     }
 }
 
-void switch2Default(){
-    debug_print("switching to default\n");
-    if ( isHintMode() ){
-        HINT_NODES = freeArray (HINT_NODES);
-        HINT_CHAR_LEN = 0;
-        if ( HINT_CHAR_BUF ) free(HINT_CHAR_BUF);
-        HINT_CHAR_BUF = calloc(MAX_NUM_HINT_CHARS, sizeof(char));
-    }
-    CURRENT_BUFFER = NULL;
-    CURRENT_BUFFER_SIZE = -1;
-    mode = Default;
-    debug_print("switched to default %p\n", HINT_NODES);
-}
-
-void switch2Edit(){
-    mode = Edit;
-    CURRENT_BUFFER = graph.selected->text;
-    CURRENT_BUFFER_SIZE = MAX_TEXT_LEN;
-    CURRENT_BUFFER_LEN = &graph.selected->text_len;
-}
-
-void switch2FilenameEdit(){
-    mode = Edit;
-    CURRENT_BUFFER = FILENAME;
-    CURRENT_BUFFER_SIZE = FILENAME_SIZE;
-    CURRENT_BUFFER_LEN = &FILENAME_LEN;
-}
 
 void activateHints(){
     populateHintText(graph.selected);
-    CURRENT_BUFFER = HINT_CHAR_BUF;
-    CURRENT_BUFFER_LEN = & HINT_CHAR_LEN;
-    CURRENT_BUFFER_SIZE = MAX_NUM_HINT_CHARS;
+    CURRENT_BUFFER = &HINT_BUFFER;
 }
 
-void switch2Travel(){
-    mode = Travel;
-    activateHints();
-}
-
-void switch2Delete(){
-    mode = Delete;
-    activateHints();
+void switch2(enum Mode to){
+    if ( isHintMode(mode) ){
+        HINT_NODES = freeArray (HINT_NODES);
+        HINT_BUFFER.len = 0;
+        if ( HINT_BUFFER.buf ) free(HINT_BUFFER.buf);
+        HINT_BUFFER.buf = calloc(HINT_BUFFER.size, sizeof(char));
+    }
+    switch ( to ){
+        case Edit:
+            mode = Edit;
+            CURRENT_BUFFER = &graph.selected->text;
+            break;
+        case Default:
+            CURRENT_BUFFER = NULL;
+            mode = Default;
+            break;
+        case FilenameEdit:
+            mode = Edit;
+            CURRENT_BUFFER = &FILENAME_BUFFER;
+            break;
+        case Travel:
+            mode = Travel; break;
+        case Delete:
+            mode = Delete; break;
+    }
+    if ( isHintMode(to) )
+        activateHints();
 }
 
 void doKeyUp(SDL_KeyboardEvent *event) {
@@ -355,15 +348,14 @@ void doKeyUp(SDL_KeyboardEvent *event) {
         app.quit = 1;
         return;
     }
-
     // up-front key-checks that apply to any mode
     switch(event->keysym.sym) {
         case SDLK_ESCAPE:
-            switch2Default();
+            switch2(Default);
             return;
         case SDLK_BACKSPACE:
-            if ( CURRENT_BUFFER && CURRENT_BUFFER_LEN >= 0)
-                CURRENT_BUFFER[--*CURRENT_BUFFER_LEN] = '\0';
+            if ( CURRENT_BUFFER && CURRENT_BUFFER->len >= 0)
+                CURRENT_BUFFER->buf[--CURRENT_BUFFER->len] = '\0';
             return;
         case SDLK_MINUS:
             LAYER_MARGIN /= SCALE;
@@ -387,18 +379,18 @@ void doKeyUp(SDL_KeyboardEvent *event) {
         switch(event->keysym.sym) {
             case SDLK_o: { makeChild(graph.selected); return; }
             case SDLK_d: { removeNodeFromGraph(graph.selected); return; }
-            case SDLK_t: { switch2Travel(); return; }
-            case SDLK_e: { switch2Edit(); return; }
-            case SDLK_r: { switch2FilenameEdit(); return; }
-            case SDLK_x: { switch2Delete(); return; }
+            case SDLK_t: { switch2(Travel); return; }
+            case SDLK_e: { switch2(Edit); return; }
+            case SDLK_r: { switch2(FilenameEdit); return; }
+            case SDLK_x: { switch2(Delete); return; }
         }
         break; // end of Default bindings
     case Travel:
         switch(event->keysym.sym) {
-            case SDLK_t: { switch2Default(); return;}
+            case SDLK_t: { switch2(Default); return;}
             case SDLK_e:
-                switch2Default(); // exiting travel mode requires freeing some memory
-                switch2Edit();
+                switch2(Default); // exiting travel mode requires freeing some memory
+                switch2(Edit);
                 return;
         }
         break; // end of Travel bindings
@@ -407,9 +399,10 @@ void doKeyUp(SDL_KeyboardEvent *event) {
     }
     case Delete: {
         switch(event->keysym.sym) {
-            case SDLK_x: { switch2Default(); return; }
+            case SDLK_x: { switch2(Default); return; }
         }
     }
+    default: break;
     }
 }
 
@@ -439,11 +432,11 @@ void eventHandler(SDL_Event *event) {
 }
 
 void handleTextInput(SDL_Event *event){
-    if ( CURRENT_BUFFER && *CURRENT_BUFFER_LEN < CURRENT_BUFFER_SIZE ){
+    if ( CURRENT_BUFFER && CURRENT_BUFFER->len < CURRENT_BUFFER->size ){
        debug_print("Adding text\n");
        int add_text = 1;
        // skip adding to buffer for hint modes if not a valid hint char
-       if ( isHintMode() ){
+       if ( isHintMode(mode) ){
            add_text = 0;
            for (int i = 0; i < strlen(HINT_CHARS); ++i){
                if ( HINT_CHARS[i] == event->edit.text[0] ){
@@ -454,13 +447,13 @@ void handleTextInput(SDL_Event *event){
        }
 
        if ( add_text )
-           CURRENT_BUFFER[(*CURRENT_BUFFER_LEN)++] = event->edit.text[0];
+           CURRENT_BUFFER->buf[(CURRENT_BUFFER->len)++] = event->edit.text[0];
        debug_print("edit.text[0]: %c\n", event->edit.text[0]);
-       debug_print("new text, len %d: %s\n", graph.selected->text_len, graph.selected->text);
+       debug_print("new text, len %d: %s\n", graph.selected->text.len, graph.selected->text.buf);
    }
-   if ( isHintMode() ){
+   if ( isHintMode(mode) ){
        // go to node specified by travel chars
-       debug_print("handling travel input: %d/%d\n", HINT_CHAR_LEN, MAX_NUM_HINT_CHARS);
+       debug_print("handling travel input: %d/%d\n", HINT_BUFFER.len/HINT_BUFFER.size);
        // hardcode k to be parent
        if ( event->edit.text[0] == 'k' ){
            hintFunction(graph.selected->p);
@@ -470,15 +463,15 @@ void handleTextInput(SDL_Event *event){
        // check if any nodes hint text matches current input
        for (int i = 0; i < HINT_NODES->num; ++i) {
            // continue if hint buffer != any hint text
-           if ( strcmp(HINT_CHAR_BUF, HINT_NODES->array[i]->hint_text) != 0 )
+           if ( strcmp(HINT_BUFFER.buf, HINT_NODES->array[i]->hint_text) != 0 )
                continue;
            hintFunction(HINT_NODES->array[i]);
            // reset hint text
            debug_print("freeing hint chars\n");
-           if ( HINT_CHAR_BUF ) free(HINT_CHAR_BUF);
+           if ( HINT_BUFFER.buf ) free( HINT_BUFFER.buf );
            debug_print("freed hint chars\n");
-           HINT_CHAR_BUF = calloc(MAX_NUM_HINT_CHARS, sizeof(char));
-           HINT_CHAR_LEN = 0;
+           HINT_BUFFER.buf = calloc(HINT_BUFFER.size, sizeof(char));
+           HINT_BUFFER.len = 0;
            recomputeNodePositions();
            populateHintText(graph.selected);
            debug_print("changing nodes\n");
@@ -564,17 +557,17 @@ void drawNode(Node* node) {
         drawRing(app.renderer, x, y, RADIUS, THICKNESS, 0x00, 0xFF, 0x00, 0x00);
 
     Point message_pos;
-    message_pos.x = (int) ((node->pos.x) * app.window_size.x)  - (int)((TEXTBOX_WIDTH_SCALE*node->text_len) / 2);
-    message_pos.y = (int) ((node->pos.y) * app.window_size.y)  - (int)(TEXTBOX_HEIGHT / 2);
+    message_pos.x = x  - (int)((TEXTBOX_WIDTH_SCALE*node->text.len) / 2);
+    message_pos.y = y  - (int)(TEXTBOX_HEIGHT / 2);
 
     /* render node text */
-    renderMessage(node->text, message_pos, TEXTBOX_WIDTH_SCALE*node->text_len, TEXTBOX_HEIGHT, EDIT_COLOR);
+    renderMessage(node->text.buf, message_pos, TEXTBOX_WIDTH_SCALE*node->text.len, TEXTBOX_HEIGHT, EDIT_COLOR);
     /* render hint text */
-    if ( isHintMode() ){
+    if ( isHintMode(mode) ){
         if (strlen(node->hint_text) > 0){
             // position char in center of node
-            message_pos.x = (int) ((node->pos.x) * app.window_size.x)  - (int)((TEXTBOX_WIDTH_SCALE) / 2) - RADIUS;
-            message_pos.y = (int) ((node->pos.y) * app.window_size.y)  - (int)(TEXTBOX_HEIGHT / 2) - RADIUS;
+            message_pos.x = x  - (int)((TEXTBOX_WIDTH_SCALE) / 2) - RADIUS;
+            message_pos.y = y  - (int)(TEXTBOX_HEIGHT / 2) - RADIUS;
             renderMessage(node->hint_text, message_pos, TEXTBOX_WIDTH_SCALE * 0.5, TEXTBOX_HEIGHT * 0.5, HINT_COLOR);
         }
     }
@@ -709,12 +702,10 @@ void recomputeNodePositions(){
             clip(1.0 - (SIDE_MARGIN * SCALE), 0.0, 1.0),
             0.5);
 }
-
 /* re-computes graph and draws everything onto renderer */
 void prepareScene() {
     SDL_SetRenderDrawColor(app.renderer, 0, 0, 0, 255);
     SDL_RenderClear(app.renderer);
-
 
     recomputeNodePositions();
 #ifdef DEBUG
@@ -728,7 +719,7 @@ void prepareScene() {
     Point filename_pos;
     filename_pos.x = (int) ((0.0) * app.window_size.x);
     filename_pos.y = (int) ((0.9) * app.window_size.y);
-    renderMessage(FILENAME, filename_pos, strlen(FILENAME) * TEXTBOX_WIDTH_SCALE, TEXTBOX_HEIGHT, EDIT_COLOR);
+    renderMessage(FILENAME_BUFFER.buf, filename_pos, strlen(FILENAME_BUFFER.buf) * TEXTBOX_WIDTH_SCALE, TEXTBOX_HEIGHT, EDIT_COLOR);
 
     // Draw mode
     Point mode_text_pos;
@@ -739,9 +730,9 @@ void prepareScene() {
 
     //Draw hint buffer
     Point hint_buf_pos;
-    hint_buf_pos.x = (int) ((1.0 * app.window_size.x) - (HINT_CHAR_LEN * TEXTBOX_WIDTH_SCALE));
+    hint_buf_pos.x = (int) ((1.0 * app.window_size.x) - (HINT_BUFFER.len * TEXTBOX_WIDTH_SCALE));
     hint_buf_pos.y = (int) ((0.9) * app.window_size.y);
-    renderMessage(HINT_CHAR_BUF, hint_buf_pos, HINT_CHAR_LEN * TEXTBOX_WIDTH_SCALE, TEXTBOX_HEIGHT, HINT_COLOR);
+    renderMessage(HINT_BUFFER.buf, hint_buf_pos, HINT_BUFFER.len * TEXTBOX_WIDTH_SCALE, TEXTBOX_HEIGHT, HINT_COLOR);
 }
 
 /* actually renders the screen */
@@ -803,9 +794,9 @@ Node* makeNode(){
     node->children->num = 0;
     node->pos.x = 0;
     node->pos.y = 0;
-    node->text = calloc(MAX_TEXT_LEN, sizeof(char));
-    node->text_len = 0;
-    node->hint_text = calloc(MAX_NUM_HINT_CHARS, sizeof(char));
+    node->text.buf = calloc(MAX_TEXT_LEN, sizeof(char));
+    node->text.len = 0;
+    node->hint_text = calloc(HINT_BUFFER.size, sizeof(char));
     return node;
 }
 
@@ -828,7 +819,7 @@ void deleteNode(Node* node){
     /* Then delete node */
     debug_print("deleting node %p\n", node);
     freeArray(node->children);
-    free(node->text);
+    free(node->text.buf);
     free(node->hint_text);
     free(node);
     debug_print("deleted node %p\n", node);
@@ -863,7 +854,7 @@ void clearHintText() {
     debug_print("hint nodes %p, num %ld\n", HINT_NODES->array, HINT_NODES->num);
     // Clear all hint text in each hint node
     for (int i = 0; i < HINT_NODES->num; ++i) {
-        for (int j = 0; j < MAX_NUM_HINT_CHARS; j++) {
+        for (int j = 0; j < HINT_BUFFER.size; j++) {
             debug_print("node %d (%p)\n", i, HINT_NODES->array[i]);
             debug_print("hint_text %p\n", HINT_NODES->array[i]->hint_text);
             if (HINT_NODES->array[i]->hint_text){
@@ -906,12 +897,12 @@ void populateHintText(Node* node){
     debug_print("cleared\n");
     debug_print("%p: %s\n",node->p->hint_text, node->p->hint_text);
     char** queue = calloc(8192, sizeof(char*));
-    char* prefix = calloc(MAX_NUM_HINT_CHARS+1, sizeof(char));
+    char* prefix = calloc(HINT_BUFFER.size+1, sizeof(char));
     int front = 0, back=0, done=0;
     while ( !done ){
         debug_print("iterating while, back: %d, front: %d\n", back, front);
         for (int i = 0; i < strlen(HINT_CHARS); ++i) {
-            queue[back] = calloc(MAX_NUM_HINT_CHARS+1, sizeof(char));
+            queue[back] = calloc(HINT_BUFFER.size+1, sizeof(char));
             strcpy(queue[back], prefix);
             queue[back][strlen(prefix)] = HINT_CHARS[i];
             debug_print("allocated %p: %s\n", queue[back], queue[back]);
@@ -981,16 +972,16 @@ int main(int argc, char *argv[]) {
 
     makeGraph();
 
-    FILENAME = calloc(64, sizeof(char));
+    FILENAME_BUFFER.buf = calloc(FILENAME_BUFFER.size, sizeof(char));
     if ( argc > 1 ){
-        strcpy(FILENAME, argv[1]);
+        strcpy(FILENAME_BUFFER.buf, argv[1]);
         readfile();
     }
     else
-        strcpy(FILENAME, "unnamed.txt");
-    FILENAME_LEN = strlen(FILENAME);
+        strcpy(FILENAME_BUFFER.buf, "unnamed.txt");
+    FILENAME_BUFFER.len = strlen(FILENAME_BUFFER.buf);
 
-    HINT_CHAR_BUF = calloc(MAX_NUM_HINT_CHARS + 1, sizeof(char));
+    HINT_BUFFER.buf = calloc(HINT_BUFFER.size + 1, sizeof(char));
     /* gracefully close windows on exit of program */
     atexit(SDL_Quit);
     app.quit = 0;
@@ -1022,9 +1013,9 @@ int main(int argc, char *argv[]) {
     write();
     debug_print("saved\n");
 
-    if (HINT_CHAR_BUF)
-        free(HINT_CHAR_BUF);
-    free(FILENAME);
+    if (HINT_BUFFER.buf)
+        free(HINT_BUFFER.buf);
+    free(FILENAME_BUFFER.buf);
     /* delete nodes recursively, starting from root */
     deleteNode(graph.root);
     debug_print("deleted nodes\n");
