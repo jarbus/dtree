@@ -67,6 +67,9 @@ struct Node {
     struct Node* p;
     struct Array* children;
     struct DoublePoint pos;
+    float x_offset; /* offset wrt parent; "mod" in tree drawing algos */
+    float rightmost; /* greatest descendant accumulated x_off wrt node*/
+    float leftmost; /* smallest (negative) acc. x_off wrt node */
     char* text;
     int text_len;
     char* hint_text;
@@ -129,8 +132,10 @@ void prepareScene();
 Node* makeNode();
 Node* makeChild(Node* parent);
 void drawNode(Node* node);
-void compute_root_bounds_from_selected_and_update_pos_children(Node* node, double leftmost_bound, double rightmost_bound, double level);
-void update_pos_children(Node* node, double leftmost_bound, double rightmost_bound, double level);
+void calculate_offsets(Node* node);
+void apply_offsets(Node* node, double depth, double offset);
+int get_depth(Node* node, int depth);
+void calculate_positions(Node* root, Node* selected);
 void recursively_print_positions(Node* node, int level);
 void write();
 void writeChildrenStrings(FILE* file, Node* node, int level);
@@ -506,12 +511,13 @@ void drawRing(SDL_Renderer *surface, int n_cx, int n_cy, int radius, int thickne
     }
 }
 
+
 /* Renders each node, then renders it's children and draws lines to the children */
 void drawNode(Node* node) {
     if ( node == NULL ) return;
 
-    int x = (int) ((node->pos.x) * app.window_size.x);
-    int y = (int) ((node->pos.y) * app.window_size.y);
+    int x = (int) ((node->pos.x)*2*RADIUS) + app.window_size.x/2;
+    int y = (int) ((node->pos.y)*2*RADIUS) + RADIUS;
     debug_print("%d %d from %f %f for node %p\n", x, y, node->pos.x, node->pos.y, node);
     debug_print("node %p\n", node);
     debug_print("children %p\n", node->children);
@@ -523,8 +529,8 @@ void drawNode(Node* node) {
         drawRing(app.renderer, x, y, RADIUS, THICKNESS, 0x00, 0xFF, 0x00, 0x00);
 
     Point message_pos;
-    message_pos.x = (int) ((node->pos.x) * app.window_size.x)  - (int)((TEXTBOX_WIDTH_SCALE*node->text_len) / 2);
-    message_pos.y = (int) ((node->pos.y) * app.window_size.y)  - (int)(TEXTBOX_HEIGHT / 2);
+    message_pos.x = x - (int)((TEXTBOX_WIDTH_SCALE*node->text_len) / 2);
+    message_pos.y = y - (int)(TEXTBOX_HEIGHT / 2);
 
     /* render node text */
     renderMessage(node->text, message_pos, TEXTBOX_WIDTH_SCALE*node->text_len, TEXTBOX_HEIGHT, EDIT_COLOR);
@@ -532,16 +538,16 @@ void drawNode(Node* node) {
     if ( isHintMode() ){
         if (strlen(node->hint_text) > 0){
             // position char in center of node
-            message_pos.x = (int) ((node->pos.x) * app.window_size.x)  - (int)((TEXTBOX_WIDTH_SCALE) / 2) - RADIUS;
-            message_pos.y = (int) ((node->pos.y) * app.window_size.y)  - (int)(TEXTBOX_HEIGHT / 2) - RADIUS;
+            message_pos.x = x - (int)((TEXTBOX_WIDTH_SCALE) / 2) - RADIUS;
+            message_pos.y = y - (int)(TEXTBOX_HEIGHT / 2) - RADIUS;
             renderMessage(node->hint_text, message_pos, TEXTBOX_WIDTH_SCALE * 0.5, TEXTBOX_HEIGHT * 0.5, HINT_COLOR);
         }
     }
 
     /* draw edges between parent and child nodes */
     if (node != graph.root){
-        int px = (int) ((node->p->pos.x) * app.window_size.x);
-        int py = (int) ((node->p->pos.y) * app.window_size.y);
+        int px = (int) ((node->p->pos.x)*2*RADIUS) + app.window_size.x/2;
+        int py = (int) ((node->p->pos.y)*2*RADIUS) + RADIUS;
         SDL_RenderDrawLine(app.renderer, x, y, px, py);
     }
 
@@ -581,69 +587,67 @@ void renderMessage(char* message, Point pos, double width, double height, SDL_Co
 }
 
 
-/* Given the bounds for a parent node, updates the positions of all children nodes */
-void update_pos_children(Node* node, double leftmost_bound, double rightmost_bound, double level){
-
-    /* update current node position */
-    node->pos.x = (rightmost_bound + leftmost_bound) / 2;
-    node->pos.y = level;
-
-    debug_print("update node position to %lf %lf\n", node->pos.x, node->pos.y);
-
-    /* dont update children if no children */
-    if ( node->children->num == 0)
-        return;
-
-    /* split space for parent node up among children and update positions */
-    double step = (rightmost_bound - leftmost_bound) / node->children->num;
-    double iter = leftmost_bound;
-
-    for (int i = 0; i < node->children->num; i += 1){
-        debug_print("loop %d / %ld with step %lf\n", i, node->children->num, step);
-        debug_print("%d %p\n", i, node->children->array[i]);
-        debug_print("%p->%p [%lf %lf]\n", node, node->children->array[i], iter, iter+step);
-        update_pos_children(node->children->array[i], iter, iter + step, level + LAYER_MARGIN);
-        iter += step;
+// recursive helper function for calculate_positions
+// shifts over subtrees so that they do not overlap at any x-coordinate
+void calculate_offsets(Node* node) {
+    node -> x_offset  = 0;
+    node -> rightmost = 0;
+    node -> leftmost  = 0;
+    double total_offset = 0;
+    for (int i = 0; i < node->children->num; i++) {
+        Node* child = node->children->array[i];
+        calculate_offsets(child);
+        if (i > 0) {
+            // shift the current child (more than) far enough away from the
+            // previous to guarantee that they subtrees will not overlap
+            double offset = (node->children->array[i-1]->rightmost)-(child->leftmost)+1.;
+            total_offset += offset;
+            child->x_offset = total_offset;
+        }
+    }
+    // center parent over children
+    for (int i = 0; i < node->children->num; i++) {
+        Node* child = node->children->array[i];
+        child->x_offset -= total_offset/2.;
+    }
+    // calculate leftmost and rightmost for current node
+    if(node->children->num >= 1) {
+        Node* leftmost_child = node->children->array[0];
+        node->leftmost = leftmost_child->x_offset + leftmost_child->leftmost;
+        Node* rightmost_child = node->children->array[node->children->num-1];
+        node->rightmost = rightmost_child->x_offset + rightmost_child->rightmost;
     }
 }
 
-
-
-void compute_root_bounds_from_selected_and_update_pos_children(Node* node, double leftmost_bound, double rightmost_bound, double level){
-
-    debug_print("crb start\n");
-    /* If we reached the root, compute all child bounds relative to the root bounds */
-    if (node == graph.root){
-        update_pos_children(node, leftmost_bound, rightmost_bound, level);
-        return;
+// recursive helper function for calculate_positions
+// accumulates offsets to assign correct [x,y] values to each node
+// simultaneously scales down coords to fit into 1 by 1 box
+void apply_offsets(Node* node, double depth, double offset) {
+    node->pos.x = offset;
+    node->pos.y = depth;
+    for (int i = 0; i < node->children->num; i++) {
+        Node* child = node->children->array[i];
+        apply_offsets(child, depth+1., offset + child->x_offset);
     }
-    debug_print("root not reached\n");
+}
 
-    /* we step through each sibling of the current node,
-    giving each child the same size as the current node */
-    double step_size = rightmost_bound - leftmost_bound;
-    int child_idx = 0;
-
-    debug_print("computing node children\n");
-
-    /* compute idx of child relative to parent */
-    debug_print("parent %p\n", node->p);
-    debug_print("parent's children %p\n", node->p->children);
-    debug_print("num children %ld\n", node->p->children->num);
-    for (int i = 0; i < node->p->children->num; i++) {
-        debug_print("child %p\n", node->p->children->array[i]);
-        if (node->p->children->array[i] == node){
-            child_idx = i;
-            break;
+// returns the height of the subtree with given root node
+int get_depth(Node* node, int depth) {
+    int d = depth;
+    for (int i = 0; i < node->children->num; i++) {
+        Node* child = node->children->array[i];
+        int new_depth = get_depth(child,depth+1);
+        if ( new_depth > d) {
+            d = new_depth;
         }
     }
-    debug_print("computed node children\n");
-    /* compute the left and right boundaries of the parent node relative
-    to the location of the child */
-    double parent_left_bound = leftmost_bound - (step_size * child_idx);
-    double parent_right_bound = rightmost_bound + (step_size * (node->p->children->num - child_idx-1));
-    compute_root_bounds_from_selected_and_update_pos_children(node->p, parent_left_bound, parent_right_bound, level - LAYER_MARGIN);
-    debug_print("crb end\n");
+    return d;
+}
+
+// recomputes the coordinates of the nodes (i.e. populates pos field)
+void calculate_positions(Node* root, Node* selected){
+    calculate_offsets(root);
+    apply_offsets(root, 0., 0.);
 }
 
 /* Debug function, used to print locations of all nodes in indented hierarchy */
@@ -664,15 +668,8 @@ void prepareScene() {
     SDL_SetRenderDrawColor(app.renderer, 0, 0, 0, 255);
     SDL_RenderClear(app.renderer);
 
-    /* fill up more space if at the root node, just a visual improvement */
-    if ( graph.root == graph.selected )
-        compute_root_bounds_from_selected_and_update_pos_children(graph.selected, 0.1, 0.9, 0.5);
-    else
-        compute_root_bounds_from_selected_and_update_pos_children(
-            graph.selected,
-                clip(SIDE_MARGIN * SCALE, 0.0, 1.0),
-                clip(1.0 - (SIDE_MARGIN * SCALE), 0.0, 1.0),
-                0.5);
+    // recompute the coordinates of each node in the tree
+    calculate_positions(graph.root, graph.selected);
 
 #ifdef DEBUG
     recursively_print_positions(graph.root, 0);
