@@ -3,7 +3,7 @@
 //   - qol: highlight matching characters as you fill them in
 // - better drawing algs - durkin
 // - add, copy, paste functionality
-// - optimization
+// - optimization, reduce memory usage
 // NOTE:
 // SDLK is software character, SCANCODE is hardware
 //
@@ -115,37 +115,97 @@ static SDL_Color EDIT_COLOR = {255, 255, 255};
 static SDL_Color HINT_COLOR = {255, 0, 0};
 
 
+void clearHintText();
 double clip(double num, double min, double max);
-void initSDL();
+unsigned int countTabs(char* string);
+void compute_root_bounds_from_selected_and_update_pos_children(Node* node, double leftmost_bound, double rightmost_bound, double level);
+void deleteNode(Node* node);
 void doKeyDown(SDL_KeyboardEvent *event);
 void doKeyUp(SDL_KeyboardEvent *event);
-void eventHandler(SDL_Event *event);
-void set_pixel(SDL_Renderer *rend, int x, int y, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
 void drawCircle(SDL_Renderer *surface, int n_cx, int n_cy, int radius, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
+void drawNode(Node* node);
 void drawRing(SDL_Renderer *surface, int n_cx, int n_cy, int radius, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
-void renderMessage(char* message, Point pos, double width, double height, SDL_Color color);
-void presentScene();
-void prepareScene();
+void endAtNewline(char* string, int textlen);
+void eventHandler(SDL_Event *event);
+void* freeArray(Array *a);
+char* getModeName();
+void handleTextInput(SDL_Event *event);
+Array* initArray(size_t initialSize);
+void initSDL();
 Node* makeNode();
 Node* makeChild(Node* parent);
-void drawNode(Node* node);
-void compute_root_bounds_from_selected_and_update_pos_children(Node* node, double leftmost_bound, double rightmost_bound, double level);
-void update_pos_children(Node* node, double leftmost_bound, double rightmost_bound, double level);
+void populateHintText(Node* node);
+void presentScene();
+void prepareScene();
+void readfile();
+void recomputeNodePositions();
 void recursively_print_positions(Node* node, int level);
+void* removeFromArray(Array *a, Node* node);
+void removeNodeFromGraph(Node* node);
+void renderMessage(char* message, Point pos, double width, double height, SDL_Color color);
+void set_pixel(SDL_Renderer *rend, int x, int y, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
+void switch2Edit();
+void switch2Default();
+void switch2Travel();
+void update_pos_children(Node* node, double leftmost_bound, double rightmost_bound, double level);
 void write();
 void writeChildrenStrings(FILE* file, Node* node, int level);
-void readfile();
-void deleteNode(Node* node);
-void removeNodeFromGraph(Node* node);
-Array* initArray(size_t initialSize);
-void* freeArray(Array *a);
-void* removeFromArray(Array *a, Node* node);
-void clearHintText();
-void populateHintText(Node* node);
-char* getModeName();
-void switch2Default();
-void switch2Edit();
-void switch2Travel();
+
+void readfile(){
+    FILE* fp = fopen(FILENAME, "r");
+    if ( !fp )
+        return;
+    /* buffer to store lines */
+    char* buf = calloc(BUF_SIZE, sizeof(char));
+    /* load first line of file */
+    char* ret = fgets(buf, BUF_SIZE, fp);
+    /* keep references to all nodes that can have children added,
+     * one per each level */
+    Node** hierarchy = calloc(BUF_SIZE, sizeof(Node*));
+    unsigned int level = 0;
+    /* Load graph root manually */
+    hierarchy[0] = graph.root;
+    endAtNewline(ret, strlen(ret));
+    strcpy(graph.root->text, ret);
+    graph.root->text_len = strlen(ret);
+    while ( true ){
+        /* loads next line */
+        ret = fgets(buf, BUF_SIZE, fp);
+        /* reached EOF */
+        if ( ret != buf )
+            break;
+        /* remove any trailing newlines */
+        endAtNewline(ret, strlen(ret));
+        /* determine level in tree by number of tabs */
+        level = countTabs(ret);
+        /* create new child node */
+        hierarchy[level] = makeChild(hierarchy[level-1]);
+        /* copy current line to child node, offset by number of tabs */
+        strcpy(hierarchy[level]->text, ret + level);
+        hierarchy[level]->text_len = strlen(ret)-1; // for some reason I need to have a -1 here
+    }
+    fclose(fp);
+    free(buf);
+    free(hierarchy);
+}
+
+ /* Recursively print children of nodes, with each child indented once from the parent */
+void writeChildrenStrings(FILE* file, Node* node, int level){
+    for(int i=0; i<level;i++)
+        fprintf(file, "\t");
+    fprintf(file, "%s\n", node->text);
+    for (int i=0; i<node->children->num; i++){
+        writeChildrenStrings(file, node->children->array[i], level + 1);
+    }
+}
+
+void write(){
+    if ( FILENAME == NULL ) return;
+     FILE* output = fopen(FILENAME, "w");
+    debug_print("write open done\n");
+    writeChildrenStrings(output, graph.root, 0);
+    fclose(output);
+}
 
 char* getModeName(){
     switch(mode) {
@@ -177,10 +237,8 @@ void hintFunction(Node* node){
 
 
 double clip(double num, double min, double max){
-    if ( num < min )
-        return min;
-    if ( num > max )
-        return max;
+    if ( num < min ) return min;
+    if ( num > max ) return max;
     return num;
 }
 
@@ -200,7 +258,6 @@ void initSDL() {
 
     app.window = SDL_CreateWindow("dtree", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, windowFlags);
 
-
     if (!app.window) {
         printf("Failed to open %d x %d window: %s\n", SCREEN_WIDTH, SCREEN_HEIGHT, SDL_GetError());
         exit(1);
@@ -217,15 +274,10 @@ void initSDL() {
         exit(1);
     }
     app.quit = 0;
-
-    int w, h;
-    SDL_GetWindowSize(app.window, &w, &h);
-    app.window_size.x = w;
-    app.window_size.y = h;
+    SDL_GetWindowSize(app.window, &app.window_size.x, &app.window_size.y);
 
     /* start SDL_ttf */
-    if(TTF_Init()==-1)
-    {
+    if(TTF_Init()==-1){
         printf("TTF_Init: %s\n", TTF_GetError());
         return;
     }
@@ -247,7 +299,6 @@ void initSDL() {
 
     if(FONT == NULL) {
         printf("TTF_OpenFont: %s\n", TTF_GetError());
-        // handle error
     }
 }
 
@@ -296,20 +347,15 @@ void switch2Delete(){
     activateHints();
 }
 
-void doKeyDown(SDL_KeyboardEvent *event) {
-    if (event->repeat != 0) {
-        return;
-    }
-    if (event->keysym.sym == SDLK_q) {
-        printf("quitting...\n");
-        app.quit = 1;
-    }
-}
-
 void doKeyUp(SDL_KeyboardEvent *event) {
     if (event->repeat != 0) {
         return;
     }
+    if (event->keysym.sym == SDLK_q){
+        app.quit = 1;
+        return;
+    }
+
     // up-front key-checks that apply to any mode
     switch(event->keysym.sym) {
         case SDLK_ESCAPE:
@@ -338,24 +384,24 @@ void doKeyUp(SDL_KeyboardEvent *event) {
     // mode-specific key-bindings
     switch(mode) {
     case Default:
-    switch(event->keysym.sym) {
-        case SDLK_o: { makeChild(graph.selected); return; }
-        case SDLK_d: { removeNodeFromGraph(graph.selected); return; }
-        case SDLK_t: { switch2Travel(); return; }
-        case SDLK_e: { switch2Edit(); return; }
-        case SDLK_r: { switch2FilenameEdit(); return; }
-        case SDLK_x: { switch2Delete(); return; }
-    }
-    break; // end of Default bindings
+        switch(event->keysym.sym) {
+            case SDLK_o: { makeChild(graph.selected); return; }
+            case SDLK_d: { removeNodeFromGraph(graph.selected); return; }
+            case SDLK_t: { switch2Travel(); return; }
+            case SDLK_e: { switch2Edit(); return; }
+            case SDLK_r: { switch2FilenameEdit(); return; }
+            case SDLK_x: { switch2Delete(); return; }
+        }
+        break; // end of Default bindings
     case Travel:
-    switch(event->keysym.sym) {
-        case SDLK_t: { switch2Default(); return;}
-        case SDLK_e:
-            switch2Default(); // exiting travel mode requires freeing some memory
-            switch2Edit();
-            return;
-    }
-    break; // end of Travel bindings
+        switch(event->keysym.sym) {
+            case SDLK_t: { switch2Default(); return;}
+            case SDLK_e:
+                switch2Default(); // exiting travel mode requires freeing some memory
+                switch2Edit();
+                return;
+        }
+        break; // end of Travel bindings
     case Edit: {
         return; // edit-mode specific key-binds don't really exist
     }
@@ -370,56 +416,7 @@ void doKeyUp(SDL_KeyboardEvent *event) {
 void eventHandler(SDL_Event *event) {
     switch (event->type){
         case SDL_TEXTINPUT:
-            if ( CURRENT_BUFFER && *CURRENT_BUFFER_LEN < CURRENT_BUFFER_SIZE ){
-                debug_print("Adding text\n");
-                int add_text = 1;
-                // skip adding to buffer for hint modes if not a valid hint char
-                if ( isHintMode() ){
-                    add_text = 0;
-                    for (int i = 0; i < strlen(HINT_CHARS); ++i){
-                        if ( HINT_CHARS[i] == event->edit.text[0] ){
-                            add_text = 1;
-                            break;
-                        }
-                    }
-                }
-
-                if ( add_text )
-                    CURRENT_BUFFER[(*CURRENT_BUFFER_LEN)++] = event->edit.text[0];
-                debug_print("edit.text[0]: %c\n", event->edit.text[0]);
-                debug_print("new text, len %d: %s\n", graph.selected->text_len, graph.selected->text);
-            }
-            if ( isHintMode() ){
-                // go to node specified by travel chars
-                debug_print("handling travel input: %d/%d\n", HINT_CHAR_LEN, MAX_NUM_HINT_CHARS);
-                // hardcode k to be parent
-                if ( event->edit.text[0] == 'k' ){
-                    hintFunction(graph.selected->p);
-                    prepareScene();
-                    populateHintText(graph.selected);
-                }
-                // check if any nodes hint text matches current input
-                for (int i = 0; i < HINT_NODES->num; ++i) {
-                    // continue if hint buffer != any hint text
-                    if ( strcmp(HINT_CHAR_BUF, HINT_NODES->array[i]->hint_text) != 0 )
-                        continue;
-                    hintFunction(HINT_NODES->array[i]);
-                    // reset hint text
-                    debug_print("freeing hint chars\n");
-                    if ( HINT_CHAR_BUF ) free(HINT_CHAR_BUF);
-                    debug_print("freed hint chars\n");
-                    HINT_CHAR_BUF = calloc(MAX_NUM_HINT_CHARS, sizeof(char));
-                    HINT_CHAR_LEN = 0;
-                    prepareScene();
-                    populateHintText(graph.selected);
-                    debug_print("changing nodes\n");
-                }
-                debug_print("handled hint input\n");
-            }
-            break;
-
-        case SDL_KEYDOWN:
-            doKeyDown(&event->key);
+            handleTextInput(event);
             break;
 
         case SDL_KEYUP:
@@ -428,12 +425,7 @@ void eventHandler(SDL_Event *event) {
 
         case SDL_WINDOWEVENT:
             if(event->window.event == SDL_WINDOWEVENT_RESIZED) {
-
-                int w, h;
-                SDL_GetWindowSize(app.window, &w, &h);
-                debug_print("window resized from %dx%d to %dx%d\n", app.window_size.x, app.window_size.y, w, h);
-                app.window_size.x = w;
-                app.window_size.y = h;
+                SDL_GetWindowSize(app.window, &app.window_size.x, &app.window_size.y);
             }
             break;
 
@@ -444,6 +436,55 @@ void eventHandler(SDL_Event *event) {
         default:
             break;
     }
+}
+
+void handleTextInput(SDL_Event *event){
+    if ( CURRENT_BUFFER && *CURRENT_BUFFER_LEN < CURRENT_BUFFER_SIZE ){
+       debug_print("Adding text\n");
+       int add_text = 1;
+       // skip adding to buffer for hint modes if not a valid hint char
+       if ( isHintMode() ){
+           add_text = 0;
+           for (int i = 0; i < strlen(HINT_CHARS); ++i){
+               if ( HINT_CHARS[i] == event->edit.text[0] ){
+                   add_text = 1;
+                   break;
+               }
+           }
+       }
+
+       if ( add_text )
+           CURRENT_BUFFER[(*CURRENT_BUFFER_LEN)++] = event->edit.text[0];
+       debug_print("edit.text[0]: %c\n", event->edit.text[0]);
+       debug_print("new text, len %d: %s\n", graph.selected->text_len, graph.selected->text);
+   }
+   if ( isHintMode() ){
+       // go to node specified by travel chars
+       debug_print("handling travel input: %d/%d\n", HINT_CHAR_LEN, MAX_NUM_HINT_CHARS);
+       // hardcode k to be parent
+       if ( event->edit.text[0] == 'k' ){
+           hintFunction(graph.selected->p);
+           recomputeNodePositions();
+           populateHintText(graph.selected);
+       }
+       // check if any nodes hint text matches current input
+       for (int i = 0; i < HINT_NODES->num; ++i) {
+           // continue if hint buffer != any hint text
+           if ( strcmp(HINT_CHAR_BUF, HINT_NODES->array[i]->hint_text) != 0 )
+               continue;
+           hintFunction(HINT_NODES->array[i]);
+           // reset hint text
+           debug_print("freeing hint chars\n");
+           if ( HINT_CHAR_BUF ) free(HINT_CHAR_BUF);
+           debug_print("freed hint chars\n");
+           HINT_CHAR_BUF = calloc(MAX_NUM_HINT_CHARS, sizeof(char));
+           HINT_CHAR_LEN = 0;
+           recomputeNodePositions();
+           populateHintText(graph.selected);
+           debug_print("changing nodes\n");
+       }
+       debug_print("handled hint input\n");
+   }
 }
 
 /* Sets value of a single pixel on the screen */
@@ -557,11 +598,9 @@ void renderMessage(char* message, Point pos, double width, double height, SDL_Co
         return;
 
     debug_print("rendering %s\n", message);
-
     // create surface from string
     SDL_Surface* surfaceMessage =
         TTF_RenderText_Solid(FONT, message, color);
-    //      ^ wrapped len
 
     // now you can convert it into a texture
     SDL_Texture* Message = SDL_CreateTextureFromSurface(app.renderer, surfaceMessage);
@@ -659,21 +698,25 @@ void recursively_print_positions(Node* node, int level){
 }
 
 
-/* re-computes graph and draws everything onto renderer */
-void prepareScene() {
-    SDL_SetRenderDrawColor(app.renderer, 0, 0, 0, 255);
-    SDL_RenderClear(app.renderer);
-
+void recomputeNodePositions(){
     /* fill up more space if at the root node, just a visual improvement */
     if ( graph.root == graph.selected )
         compute_root_bounds_from_selected_and_update_pos_children(graph.selected, 0.1, 0.9, 0.5);
     else
         compute_root_bounds_from_selected_and_update_pos_children(
             graph.selected,
-                clip(SIDE_MARGIN * SCALE, 0.0, 1.0),
-                clip(1.0 - (SIDE_MARGIN * SCALE), 0.0, 1.0),
-                0.5);
+            clip(SIDE_MARGIN * SCALE, 0.0, 1.0),
+            clip(1.0 - (SIDE_MARGIN * SCALE), 0.0, 1.0),
+            0.5);
+}
 
+/* re-computes graph and draws everything onto renderer */
+void prepareScene() {
+    SDL_SetRenderDrawColor(app.renderer, 0, 0, 0, 255);
+    SDL_RenderClear(app.renderer);
+
+
+    recomputeNodePositions();
 #ifdef DEBUG
     recursively_print_positions(graph.root, 0);
 #endif
@@ -770,28 +813,23 @@ Node* makeChild(Node* parent){
     Node* child = makeNode();
     child->p = parent;
     insertArray(parent->children, child);
-
     return child;
 }
 
 void deleteNode(Node* node){
     debug_print("DELETEING\n");
     /* Handle nodes that have already been deleted */
-    if ( node == NULL ) {
+    if ( node == NULL )
         return;
-    }
     /* delete each child */
-    for (int i=0; i<node->children->num; i++){
+    for (int i=0; i<node->children->num; i++)
         deleteNode( node->children->array[i] );
-    }
 
     /* Then delete node */
     debug_print("deleting node %p\n", node);
     freeArray(node->children);
     free(node->text);
-    debug_print("deleting hint text %p\n", node);
     free(node->hint_text);
-    debug_print("deleted hint text %p\n", node);
     free(node);
     debug_print("deleted node %p\n", node);
 }
@@ -855,8 +893,8 @@ void populateHintNodes(Node* node){
         debug_print("going to next child\n");
         populateHintNodes(node->children->array[i]);
     }
-
 }
+
 void populateHintText(Node* node){
     // Current method: add parent and children
     // New method: add every node that is visible
@@ -910,24 +948,7 @@ void populateHintText(Node* node){
     debug_print("==== populate end\n");
 }
 
-/* Recursively print children of nodes, with each child indented once from the parent */
-void writeChildrenStrings(FILE* file, Node* node, int level){
-    for(int i=0; i<level;i++)
-        fprintf(file, "\t");
-    fprintf(file, "%s\n", node->text);
-    for (int i=0; i<node->children->num; i++){
-        writeChildrenStrings(file, node->children->array[i], level + 1);
-    }
-}
 
-
-void write(){
-    if ( FILENAME == NULL ) return;
-     FILE* output = fopen(FILENAME, "w");
-    debug_print("write open done\n");
-    writeChildrenStrings(output, graph.root, 0);
-    fclose(output);
-}
 
 unsigned int countTabs(char* string){
     unsigned int num_tabs = 0;
@@ -949,43 +970,7 @@ void endAtNewline(char* string, int textlen){
     }
 }
 
-void readfile(){
-    FILE* fp = fopen(FILENAME, "r");
-    if ( !fp )
-        return;
-    /* buffer to store lines */
-    char* buf = calloc(BUF_SIZE, sizeof(char));
-    /* load first line of file */
-    char* ret = fgets(buf, BUF_SIZE, fp);
-    /* keep references to all nodes that can have children added,
-     * one per each level */
-    Node** hierarchy = calloc(BUF_SIZE, sizeof(Node*));
-    unsigned int level = 0;
-    /* Load graph root manually */
-    hierarchy[0] = graph.root;
-    endAtNewline(ret, strlen(ret));
-    strcpy(graph.root->text, ret);
-    graph.root->text_len = strlen(ret);
-    while ( true ){
-        /* loads next line */
-        ret = fgets(buf, BUF_SIZE, fp);
-        /* reached EOF */
-        if ( ret != buf )
-            break;
-        /* remove any trailing newlines */
-        endAtNewline(ret, strlen(ret));
-        /* determine level in tree by number of tabs */
-        level = countTabs(ret);
-        /* create new child node */
-        hierarchy[level] = makeChild(hierarchy[level-1]);
-        /* copy current line to child node, offset by number of tabs */
-        strcpy(hierarchy[level]->text, ret + level);
-        hierarchy[level]->text_len = strlen(ret)-1; // for some reason I need to have a -1 here
-    }
-    fclose(fp);
-    free(buf);
-    free(hierarchy);
-}
+
 
 int main(int argc, char *argv[]) {
     /* set all bytes of App memory to zero */
@@ -1013,6 +998,7 @@ int main(int argc, char *argv[]) {
     SDL_Event e;
     /* Only updates display and processes inputs on new events */
     while ( !app.quit && SDL_WaitEvent(&e) ) {
+        if ( e.type == SDL_MOUSEMOTION) continue;
 
         if ( HINT_NODES )
             debug_print("%ld/%ld\n", HINT_NODES ->num, HINT_NODES->size);
