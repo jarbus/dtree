@@ -134,7 +134,7 @@ Node* makeChild(Node* parent);
 void drawNode(Node* node);
 void calculate_offsets(Node* node);
 void apply_offsets(Node* node, double depth, double offset);
-int get_depth(Node* node, int depth);
+void center_on_selected(Node* node, int selected_x, int selected_y);
 void calculate_positions(Node* root, Node* selected);
 void recursively_print_positions(Node* node, int level);
 void write();
@@ -510,7 +510,6 @@ void drawRing(SDL_Renderer *surface, int n_cx, int n_cy, int radius, int thickne
         drawCircle(surface, n_cx, n_cy, radius - i, r, g, b, a);
     }
 }
-
 
 /* Renders each node, then renders it's children and draws lines to the children */
 void drawNode(Node* node) {
