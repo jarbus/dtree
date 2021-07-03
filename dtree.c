@@ -66,7 +66,7 @@ struct Array {
 struct Node {
     struct Node* p;
     struct Array* children;
-    struct DoublePoint pos;
+    struct Point pos;
     float x_offset; /* offset wrt parent; "mod" in tree drawing algos */
     float rightmost; /* greatest descendant accumulated x_off wrt node*/
     float leftmost; /* smallest (negative) acc. x_off wrt node */
@@ -516,8 +516,8 @@ void drawRing(SDL_Renderer *surface, int n_cx, int n_cy, int radius, int thickne
 void drawNode(Node* node) {
     if ( node == NULL ) return;
 
-    int x = (int) ((node->pos.x)*2*RADIUS) + app.window_size.x/2;
-    int y = (int) ((node->pos.y)*2*RADIUS) + RADIUS;
+    int x = node->pos.x;
+    int y = node->pos.y;
     debug_print("%d %d from %f %f for node %p\n", x, y, node->pos.x, node->pos.y, node);
     debug_print("node %p\n", node);
     debug_print("children %p\n", node->children);
@@ -546,8 +546,8 @@ void drawNode(Node* node) {
 
     /* draw edges between parent and child nodes */
     if (node != graph.root){
-        int px = (int) ((node->p->pos.x)*2*RADIUS) + app.window_size.x/2;
-        int py = (int) ((node->p->pos.y)*2*RADIUS) + RADIUS;
+        int px = node->p->pos.x;
+        int py = node->p->pos.y;
         SDL_RenderDrawLine(app.renderer, x, y, px, py);
     }
 
@@ -621,33 +621,30 @@ void calculate_offsets(Node* node) {
 
 // recursive helper function for calculate_positions
 // accumulates offsets to assign correct [x,y] values to each node
-// simultaneously scales down coords to fit into 1 by 1 box
 void apply_offsets(Node* node, double depth, double offset) {
-    node->pos.x = offset;
-    node->pos.y = depth;
+    node->pos.x = (int)(offset*2.5*RADIUS + app.window_size.x/2);
+    node->pos.y = (int)(2.5*RADIUS*(depth+1.));
     for (int i = 0; i < node->children->num; i++) {
         Node* child = node->children->array[i];
         apply_offsets(child, depth+1., offset + child->x_offset);
     }
 }
 
-// returns the height of the subtree with given root node
-int get_depth(Node* node, int depth) {
-    int d = depth;
+// shifts all node positions so that the selected node is at the center of the screen
+void center_on_selected(Node* node, int selected_x, int selected_y) {
+    node->pos.x += app.window_size.x/2 - selected_x;
+    node->pos.y += app.window_size.y/2 - selected_y;
     for (int i = 0; i < node->children->num; i++) {
         Node* child = node->children->array[i];
-        int new_depth = get_depth(child,depth+1);
-        if ( new_depth > d) {
-            d = new_depth;
-        }
+        center_on_selected(child, selected_x, selected_y);
     }
-    return d;
 }
 
 // recomputes the coordinates of the nodes (i.e. populates pos field)
 void calculate_positions(Node* root, Node* selected){
     calculate_offsets(root);
     apply_offsets(root, 0., 0.);
+    center_on_selected(root, graph.selected->pos.x, graph.selected->pos.y);
 }
 
 /* Debug function, used to print locations of all nodes in indented hierarchy */
@@ -844,7 +841,8 @@ void populateHintNodes(Node* node){
     if ( !node )
         return;
     debug_print("adding hint node: %fx%f\n", node->pos.x, node->pos.y);
-    if ( 0.0 < node->pos.x && node->pos.x < 1.0 && 0.0 < node->pos.y && node->pos.y < 1.0 ){
+    if ( RADIUS <= node->pos.x && node->pos.x < app.window_size.x-RADIUS &&\
+            RADIUS < node->pos.y && node->pos.y < app.window_size.y-RADIUS) {
         insertArray(HINT_NODES, node);
         debug_print("added\n");
     }
