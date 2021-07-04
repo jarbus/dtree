@@ -2,12 +2,10 @@
 // - hint mode
 //   - qol: remove hint text that doesn't match current buffer
 //   - add, copy, paste functionality
-// - better drawing algs - durkin
-//   - switch between global and local view
-//                      ^ good alg  ^ conditioned on graph.selected
-//                                    maybe a semi circle?????
-// - optimization, reduce memory usage - xie
+// - optimization, bugfix, reduce memory usage - xie
 //   - set up base case example
+// - figure out what to do with modes
+// - add "move" operation"
 // NOTE:
 // SDLK is software character, SCANCODE is hardware
 #include <SDL2/SDL.h>
