@@ -116,7 +116,7 @@ void doKeyDown(SDL_KeyboardEvent *event);
 void doKeyUp(SDL_KeyboardEvent *event);
 void drawCircle(SDL_Renderer *surface, int n_cx, int n_cy, int radius, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
 void drawNode(Node* node);
-void drawRing(SDL_Renderer *surface, int n_cx, int n_cy, int radius, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
+void drawBorder(SDL_Renderer *surface, int n_cx, int n_cy, int radius, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
 void endAtNewline(char* string, int textlen);
 void eventHandler(SDL_Event *event);
 void* freeArray(Array *a);
@@ -470,57 +470,20 @@ void set_pixel(SDL_Renderer *rend, int x, int y, Uint8 r, Uint8 g, Uint8 b, Uint
     SDL_RenderDrawPoint(rend, x, y);
 }
 
-/* I stole this code, it works, do not touch
-   n_cx and n_cy are the centers of the circle*/
-void drawCircle(SDL_Renderer *surface, int n_cx, int n_cy, int radius, Uint8 r, Uint8 g, Uint8 b, Uint8 a) {
-    // if the first pixel in the screen is represented by (0,0) (which is in sdl)
-    // remember that the beginning of the circle is not in the middle of the pixel
-    // but to the left-top from it:
 
-    double error = (double)-radius;
-    double x = (double)radius - 0.5;
-    double y = (double)0.5;
-    double cx = n_cx - 0.5;
-    double cy = n_cy - 0.5;
-
-    while (x >= y) {
-        set_pixel(surface, (int)(cx + x), (int)(cy + y), r, g, b, a);
-        set_pixel(surface, (int)(cx + y), (int)(cy + x), r, g, b, a);
-
-        if (x != 0) {
-            set_pixel(surface, (int)(cx - x), (int)(cy + y), r, g, b, a);
-            set_pixel(surface, (int)(cx + y), (int)(cy - x), r, g, b, a);
-        }
-
-        if (y != 0) {
-            set_pixel(surface, (int)(cx + x), (int)(cy - y), r, g, b, a);
-            set_pixel(surface, (int)(cx - y), (int)(cy + x), r, g, b, a);
-        }
-
-        if (x != 0 && y != 0) {
-            set_pixel(surface, (int)(cx - x), (int)(cy - y), r, g, b, a);
-            set_pixel(surface, (int)(cx - y), (int)(cy - x), r, g, b, a);
-        }
-
-        error += y;
-        ++y;
-        error += y;
-
-        if (error >= 0) {
-            --x;
-            error -= x;
-            error -= x;
-        }
-    }
+void drawBox(SDL_Renderer *surface, int n_cx, int n_cy, int len, int offset, Uint8 r, Uint8 g, Uint8 b, Uint8 a){
+    SDL_Rect rect;
+    rect.x = (int) n_cx - ( len  / 2 )  - offset;
+    rect.y = (int) n_cy - ( TEXTBOX_HEIGHT / 2 ) - offset;
+    rect.w = len + offset + offset;
+    rect.h = TEXTBOX_HEIGHT + offset + offset;
+    SDL_SetRenderDrawColor(surface, r, g, b, a);
+    SDL_RenderDrawRect(surface, &rect);
 }
 
-
-void drawRing(SDL_Renderer *surface, int n_cx, int n_cy, int radius, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a){
-    if ( thickness > radius ) {
-        printf("Trying to draw a circle of radius %d but thickness %d is too big\n", radius, thickness);
-    }
-    for (int i=0; i< thickness; i++)
-        drawCircle(surface, n_cx, n_cy, radius - i, r, g, b, a);
+void drawBorder(SDL_Renderer *surface, int n_cx, int n_cy, int len, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a){
+    for (int i = 0; i < thickness; ++i)
+        drawBox(surface, n_cx, n_cy, len, i, r, g, b, a);
 }
 
 /* Renders each node, then renders it's children and draws lines to the children */
@@ -534,9 +497,9 @@ void drawNode(Node* node) {
     debug_print("num children %lu\n", node->children->num);
     /* draw red ring for unselected nodes, green for selected */
     if (node != graph.selected)
-        drawRing(app.renderer, x, y, RADIUS, THICKNESS, 0xFF, 0x00, 0x00, 0x00);
+        drawBorder(app.renderer, x, y, node->text.len * TEXTBOX_WIDTH_SCALE, THICKNESS, 0xFF, 0x00, 0x00, 0x00);
     else
-        drawRing(app.renderer, x, y, RADIUS, THICKNESS, 0x00, 0xFF, 0x00, 0x00);
+        drawBorder(app.renderer, x, y, node->text.len * TEXTBOX_WIDTH_SCALE, THICKNESS, 0x00, 0xFF, 0x00, 0x00);
 
     Point message_pos;
     message_pos.x = x  - (int)((TEXTBOX_WIDTH_SCALE*node->text.len) / 2);
