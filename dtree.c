@@ -515,12 +515,18 @@ void drawCircle(SDL_Renderer *surface, int n_cx, int n_cy, int radius, Uint8 r, 
 }
 
 
-void drawRing(SDL_Renderer *surface, int n_cx, int n_cy, int radius, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a){
-    if ( thickness > radius ) {
-        printf("Trying to draw a circle of radius %d but thickness %d is too big\n", radius, thickness);
-    }
-    for (int i=0; i< thickness; i++)
-        drawCircle(surface, n_cx, n_cy, radius - i, r, g, b, a);
+void drawRing(SDL_Renderer *surface, int n_cx, int n_cy, int textlen, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a){
+    SDL_Rect rect;
+    int len = ( textlen * TEXTBOX_WIDTH_SCALE );
+    rect.x = (int) n_cx - ( len / 2 );
+    rect.y = (int) n_cy - ( TEXTBOX_HEIGHT / 2 );
+    rect.w = len;
+    rect.h = TEXTBOX_HEIGHT;
+
+    SDL_SetRenderDrawColor(surface, r, g, b, a);
+    SDL_RenderDrawRect(surface, &rect);
+    /* for (int i=0; i< thickness; i++) */
+    /*     drawCircle(surface, n_cx, n_cy, radius - i, r, g, b, a); */
 }
 
 /* Renders each node, then renders it's children and draws lines to the children */
@@ -534,9 +540,9 @@ void drawNode(Node* node) {
     debug_print("num children %lu\n", node->children->num);
     /* draw red ring for unselected nodes, green for selected */
     if (node != graph.selected)
-        drawRing(app.renderer, x, y, RADIUS, THICKNESS, 0xFF, 0x00, 0x00, 0x00);
+        drawRing(app.renderer, x, y, node->text.len, THICKNESS, 0xFF, 0x00, 0x00, 0x00);
     else
-        drawRing(app.renderer, x, y, RADIUS, THICKNESS, 0x00, 0xFF, 0x00, 0x00);
+        drawRing(app.renderer, x, y, node->text.len, THICKNESS, 0x00, 0xFF, 0x00, 0x00);
 
     Point message_pos;
     message_pos.x = x  - (int)((TEXTBOX_WIDTH_SCALE*node->text.len) / 2);
