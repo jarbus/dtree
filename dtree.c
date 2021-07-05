@@ -2,8 +2,7 @@
 // - hint mode
 //   - qol: remove hint text that doesn't match current buffer
 //   - add, copy, paste functionality
-// - optimization, bugfix, reduce memory usage - xie
-//   - set up base case example
+// - bugfixes
 // - figure out what to do with modes
 // - add "move" operation"
 // NOTE:
@@ -772,6 +771,7 @@ Node* makeNode(){
     node->pos.x = 0;
     node->pos.y = 0;
     node->text.buf = calloc(MAX_TEXT_LEN, sizeof(char));
+    node->text.size = MAX_TEXT_LEN;
     node->text.len = 0;
     node->hint_text = calloc(HINT_BUFFER.size, sizeof(char));
     return node;
