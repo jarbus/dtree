@@ -188,15 +188,13 @@ void writeChildrenStrings(FILE* file, Node* node, int level){
     for(int i=0; i<level;i++)
         fprintf(file, "\t");
     fprintf(file, "%s\n", node->text.buf);
-    for (int i=0; i<node->children->num; i++){
+    for (int i=0; i<node->children->num; i++)
         writeChildrenStrings(file, node->children->array[i], level + 1);
-    }
 }
 
 void write(){
     if ( FILENAME_BUFFER.buf == NULL ) return;
-     FILE* output = fopen(FILENAME_BUFFER.buf, "w");
-    debug_print("write open done\n");
+    FILE* output = fopen(FILENAME_BUFFER.buf, "w");
     writeChildrenStrings(output, graph.root, 0);
     fclose(output);
 }
@@ -226,7 +224,6 @@ void hintFunction(Node* node){
         case Delete: removeNodeFromGraph(node); return;
         default: break;
     }
-    debug_print("did this\n");
 }
 
 
@@ -294,7 +291,6 @@ void initSDL() {
         printf("TTF_OpenFont: %s\n", TTF_GetError());
     }
 }
-
 
 void activateHints(){
     populateHintText(graph.selected);
@@ -388,9 +384,8 @@ void doKeyUp(SDL_KeyboardEvent *event) {
         return; // edit-mode specific key-binds don't really exist
     }
     case Delete: {
-        switch(event->keysym.sym) {
+        switch(event->keysym.sym)
             case SDLK_x: { switch2(Default); return; }
-        }
     }
     default: break;
     }
@@ -411,7 +406,6 @@ void eventHandler(SDL_Event *event) {
                 SDL_GetWindowSize(app.window, &app.window_size.x, &app.window_size.y);
             }
             break;
-
         case SDL_QUIT:
             exit(0);
             break;
@@ -525,9 +519,8 @@ void drawRing(SDL_Renderer *surface, int n_cx, int n_cy, int radius, int thickne
     if ( thickness > radius ) {
         printf("Trying to draw a circle of radius %d but thickness %d is too big\n", radius, thickness);
     }
-    for (int i=0; i< thickness; i++) {
+    for (int i=0; i< thickness; i++)
         drawCircle(surface, n_cx, n_cy, radius - i, r, g, b, a);
-    }
 }
 
 /* Renders each node, then renders it's children and draws lines to the children */
@@ -536,7 +529,6 @@ void drawNode(Node* node) {
 
     int x = node->pos.x;
     int y = node->pos.y;
-    debug_print("%d %d from %d %d for node %p\n", x, y, node->pos.x, node->pos.y, node);
     debug_print("node %p\n", node);
     debug_print("children %p\n", node->children);
     debug_print("num children %lu\n", node->children->num);
@@ -553,21 +545,16 @@ void drawNode(Node* node) {
     /* render node text */
     renderMessage(node->text.buf, message_pos, TEXTBOX_WIDTH_SCALE*node->text.len, TEXTBOX_HEIGHT, EDIT_COLOR);
     /* render hint text */
-    if ( isHintMode(mode) ){
-        if (strlen(node->hint_text) > 0){
-            // position char in center of node
-            message_pos.x = x  - (int)((TEXTBOX_WIDTH_SCALE) / 2) - RADIUS;
-            message_pos.y = y  - (int)(TEXTBOX_HEIGHT / 2) - RADIUS;
-            renderMessage(node->hint_text, message_pos, TEXTBOX_WIDTH_SCALE * 0.5, TEXTBOX_HEIGHT * 0.5, HINT_COLOR);
-        }
+    if ( isHintMode(mode) && strlen(node->hint_text) > 0 ){
+        // position char in center of node
+        message_pos.x = x  - (int)((TEXTBOX_WIDTH_SCALE) / 2) - RADIUS;
+        message_pos.y = y  - (int)(TEXTBOX_HEIGHT / 2) - RADIUS;
+        renderMessage(node->hint_text, message_pos, TEXTBOX_WIDTH_SCALE * 0.5, TEXTBOX_HEIGHT * 0.5, HINT_COLOR);
     }
 
     /* draw edges between parent and child nodes */
-    if (node != graph.root){
-        int px = node->p->pos.x;
-        int py = node->p->pos.y;
-        SDL_RenderDrawLine(app.renderer, x, y, px, py);
-    }
+    if (node != graph.root)
+        SDL_RenderDrawLine(app.renderer, x, y, node->p->pos.x, node->p->pos.y);
 
     for (int i=0; i<node->children->num; i++){
         debug_print("child %d / %lu: %p\n", i, node->children->num, node->children->array[i]);
@@ -575,33 +562,27 @@ void drawNode(Node* node) {
     }
 }
 
-// testing SDL_TTF font rendering
 void renderMessage(char* message, Point pos, double width, double height, SDL_Color color){
-    if (!message)
-        return;
+    if (!message) return;
 
     debug_print("rendering %s\n", message);
     // create surface from string
-    SDL_Surface* surfaceMessage =
-        TTF_RenderText_Solid(FONT, message, color);
+    SDL_Surface* surfaceMessage = TTF_RenderText_Solid(FONT, message, color);
 
     // now you can convert it into a texture
     SDL_Texture* Message = SDL_CreateTextureFromSurface(app.renderer, surfaceMessage);
 
-    SDL_Rect Message_rect; //create a rect
-    Message_rect.x = pos.x;  //controls the rect's x coordinate
-    Message_rect.y = pos.y; // controls the rect's y coordinte
-    Message_rect.w = width; // controls the width of the rect
-    Message_rect.h = height; // controls the height of the rect
+    SDL_Rect Message_rect;
+    Message_rect.x = pos.x;
+    Message_rect.y = pos.y;
+    Message_rect.w = width;
+    Message_rect.h = height;
 
-    // Copy message to the renderer
     SDL_RenderCopy(app.renderer, Message, NULL, &Message_rect);
 
-    // Don't forget to free your surface and texture
     SDL_FreeSurface(surfaceMessage);
     SDL_DestroyTexture(Message);
 }
-
 
 // recursive helper function for calculate_positions
 // shifts over subtrees so that they do not overlap at any x-coordinate
@@ -737,7 +718,6 @@ void insertArray(Array *a, void* element) {
     a->array[a->num++] = element;
 }
 void* removeFromArray(Array *a, Node* node){
-
     bool start_shifting = false;
     Node** nodes = a->array;
     for (int i = 0; i < a->num-1; ++i) {
@@ -959,9 +939,6 @@ int main(int argc, char *argv[]) {
     /* Only updates display and processes inputs on new events */
     while ( !app.quit && SDL_WaitEvent(&e) ) {
         if ( e.type == SDL_MOUSEMOTION) continue;
-
-        if ( HINT_NODES )
-            debug_print("%ld/%ld\n", HINT_NODES ->num, HINT_NODES->size);
 
         /* Handle input before rendering */
         eventHandler(&e);
