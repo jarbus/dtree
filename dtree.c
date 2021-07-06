@@ -720,7 +720,7 @@ void insertArray(Array *a, void* element) {
 void* removeFromArray(Array *a, Node* node){
     bool start_shifting = false;
     Node** nodes = a->array;
-    for (int i = 0; i < a->num-1; ++i) {
+    for (int i = 0; i < a->num; ++i) {
         if ( nodes[i] == node )
             start_shifting = true;
         if ( start_shifting )
