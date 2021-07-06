@@ -36,7 +36,7 @@ typedef struct DoublePoint DoublePoint;
 typedef struct App App;
 typedef struct Buffer Buffer;
 
-enum Mode{Default, Edit, FilenameEdit, Travel, Delete};
+enum Mode{Default, Edit, FilenameEdit, Travel, Delete, MoveSrc, MoveDst};
 struct Point {
     int x;
     int y;
@@ -77,37 +77,32 @@ struct Graph {
     int num_nodes;
     Node* selected;
 };
-static App app;
-static Graph graph;
-static enum Mode mode = Default;
-static const char* HINT_CHARS = "asdfghjl;\0";
-// radius and thickness of node ring
+
+/* User Customizable Variables*/
+static Buffer HINT_BUFFER =     {NULL, 0, 2};               // {ptr, cur_len, max_size} for hints
+static Buffer FILENAME_BUFFER = {NULL, 0, 64};              // {ptr, cur_len, max_size} for fname
+static SDL_Color EDIT_COLOR = {255, 255, 255};              // RGB
+static SDL_Color HINT_COLOR = {255, 0, 0};                  // RGB
+static int TEXTBOX_WIDTH_SCALE = 40;                        // width of char
+static int TEXTBOX_HEIGHT = 100;                            // Heigh of char
+static int MAX_TEXT_LEN = 128;                              // Max Num of chars in a node
+// radius and thickness of node box
 static int RADIUS = 50;
 static int THICKNESS = 10;
-// Boundaries for tree
-static double LEFT_BOUNDARY = 0.2;
-static double RIGHT_BOUNDARY = 0.8;
-// Spacing between layers of tree
-static double LAYER_MARGIN = 0.3;
-// Spacing between edge of screen and node
-static double SIDE_MARGIN = 0.2;
-static double SCALE = 1.5;
-// Default Font
-static TTF_Font* FONT;
-static int FONT_SIZE = 40;
-// width and heigh of text boxes
-static int TEXTBOX_WIDTH_SCALE = 40;
-static int TEXTBOX_HEIGHT = 100;
-static int MAX_TEXT_LEN = 128;
-// array of all nodes to be hinted to
-static Array* HINT_NODES;
-// buffer to store current hint progress
-static Buffer* CURRENT_BUFFER;
-static Buffer HINT_BUFFER = {NULL, 0, 2};
-static Buffer FILENAME_BUFFER = {NULL, 0, 64};
-static SDL_Color EDIT_COLOR = {255, 255, 255};
-static SDL_Color HINT_COLOR = {255, 0, 0};
+static int FONT_SIZE = 30;
+static char* FONT_NAME = "./assets/FiraSans-Regular.ttf";   // Default Font name
+static const char* HINT_CHARS = "asdfghjl;\0";              // characters to use for hints
 
+/* Globals */
+static App app;                 // App object that contains rendering info
+static Graph graph;             // Graph object that contains nodes
+static enum Mode mode = Default;// Global mode, initialized to default
+static TTF_Font* FONT;          // Global Font object
+static Array* HINT_NODES;       // array of all nodes to be hinted to
+static Buffer* CURRENT_BUFFER;  // buffer to store current hint progress
+static Node* MOVE_SRC = NULL;
+
+void activateHints();
 void clearHintText();
 double clip(double num, double min, double max);
 unsigned int countTabs(char* string);
@@ -124,6 +119,7 @@ char* getModeName();
 void handleTextInput(SDL_Event *event);
 Array* initArray(size_t initialSize);
 void initSDL();
+void insertArray(Array *a, void* element);
 bool isHintMode(enum Mode mode_param);
 Node* makeNode();
 Node* makeChild(Node* parent);
@@ -136,7 +132,7 @@ void presentScene();
 void prepareScene();
 void readfile();
 void recursively_print_positions(Node* node, int level);
-void* removeFromArray(Array *a, Node* node);
+void removeFromArray(Array *a, Node* node);
 void removeNodeFromGraph(Node* node);
 void renderMessage(char* message, Point pos, double width, double height, SDL_Color color);
 void set_pixel(SDL_Renderer *rend, int x, int y, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
@@ -205,6 +201,9 @@ char* getModeName(){
         case Edit: return "EDIT";
         case Travel: return "TRAVEL";
         case Delete: return "DELETE";
+        case FilenameEdit: return "FILENAME EDIT";
+        case MoveSrc: return "MOVE SOURCE";
+        case MoveDst: return "MOVE DEST";
         default: return NULL;
     }
 }
@@ -213,6 +212,8 @@ bool isHintMode(enum Mode mode_param){
     switch(mode_param){
         case Travel: return true;
         case Delete: return true;
+        case MoveSrc: return true;
+        case MoveDst: return true;
         default: return false;
     }
 }
@@ -222,6 +223,15 @@ void hintFunction(Node* node){
     switch(mode){
         case Travel: graph.selected = node; return;
         case Delete: removeNodeFromGraph(node); return;
+        case MoveSrc: MOVE_SRC = node; switch2(MoveDst); return;
+        case MoveDst:
+            removeFromArray(MOVE_SRC->p->children, MOVE_SRC);
+            insertArray(node->children, MOVE_SRC);
+            MOVE_SRC->p = node;
+            calculate_positions(graph.root, graph.selected);
+            MOVE_SRC = NULL;
+            switch2(MoveSrc);
+            return;
         default: break;
     }
 }
@@ -274,7 +284,7 @@ void initSDL() {
     atexit(TTF_Quit); /* remember to quit SDL_ttf */
 
     //this opens a font style and sets a size
-    FONT = TTF_OpenFont("./assets/FiraSans-Regular.ttf", FONT_SIZE);
+    FONT = TTF_OpenFont(FONT_NAME, FONT_SIZE);
 
     debug_print("TTF_FontHeight          : %d\n",TTF_FontHeight(FONT));
     debug_print("TTF_FontAscent          : %d\n",TTF_FontAscent(FONT));
@@ -321,6 +331,10 @@ void switch2(enum Mode to){
             mode = Travel; break;
         case Delete:
             mode = Delete; break;
+        case MoveSrc:
+            mode = MoveSrc; break;
+        case MoveDst:
+            mode = MoveDst; break;
     }
     if ( isHintMode(to) )
         activateHints();
@@ -343,20 +357,6 @@ void doKeyUp(SDL_KeyboardEvent *event) {
             if ( CURRENT_BUFFER && CURRENT_BUFFER->len >= 0)
                 CURRENT_BUFFER->buf[--CURRENT_BUFFER->len] = '\0';
             return;
-        case SDLK_MINUS:
-            LAYER_MARGIN /= SCALE;
-            RADIUS = (int) RADIUS / SCALE;
-            THICKNESS = (int) THICKNESS / SCALE;
-            LEFT_BOUNDARY -= SIDE_MARGIN * SCALE;
-            RIGHT_BOUNDARY -= SCALE;
-            return;
-        case SDLK_EQUALS:
-            LAYER_MARGIN *= SCALE;
-            RADIUS = (int) RADIUS * SCALE;
-            THICKNESS = (int) THICKNESS * SCALE;
-            LEFT_BOUNDARY += SCALE;
-            RIGHT_BOUNDARY += SCALE;
-            return;
     }
 
     // mode-specific key-bindings
@@ -369,6 +369,7 @@ void doKeyUp(SDL_KeyboardEvent *event) {
             case SDLK_e: { switch2(Edit); return; }
             case SDLK_r: { switch2(FilenameEdit); return; }
             case SDLK_x: { switch2(Delete); return; }
+            case SDLK_m: { switch2(MoveSrc); return; }
         }
         break; // end of Default bindings
     case Travel:
@@ -456,7 +457,10 @@ void handleTextInput(SDL_Event *event){
            debug_print("freed hint chars\n");
            HINT_BUFFER.buf = calloc(HINT_BUFFER.size, sizeof(char));
            HINT_BUFFER.len = 0;
+
+           debug_print("calculating positions\n");
            calculate_positions(graph.root, graph.selected);
+           debug_print("populating hint text\n");
            populateHintText(graph.selected);
            debug_print("changing nodes\n");
        }
@@ -550,10 +554,12 @@ void renderMessage(char* message, Point pos, double width, double height, SDL_Co
 // recursive helper function for calculate_positions
 // shifts over subtrees so that they do not overlap at any x-coordinate
 void calculate_offsets(Node* node) {
+    debug_print("calculating offsets for %p\n", node);
     node -> x_offset  = 0;
     node -> rightmost = 0;
     node -> leftmost  = 0;
     double total_offset = 0;
+    debug_print("shifting %ld children for node with text %s\n", node->children->num, node->text.buf);
     for (int i = 0; i < node->children->num; i++) {
         Node* child = node->children->array[i];
         calculate_offsets(child);
@@ -565,12 +571,14 @@ void calculate_offsets(Node* node) {
             child->x_offset = total_offset;
         }
     }
+    debug_print("centering parent\n");
     // center parent over children
     for (int i = 0; i < node->children->num; i++) {
         Node* child = node->children->array[i];
         child->x_offset -= total_offset/2.;
     }
     // calculate leftmost and rightmost for current node
+    debug_print("calculating left and rightmost children\n");
     if(node->children->num >= 1) {
         Node* leftmost_child = node->children->array[0];
         node->leftmost = leftmost_child->x_offset + leftmost_child->leftmost;
@@ -602,9 +610,14 @@ void center_on_selected(Node* node, int selected_x, int selected_y) {
 
 // recomputes the coordinates of the nodes (i.e. populates pos field)
 void calculate_positions(Node* root, Node* selected){
+
+    debug_print("calculating offsets\n");
     calculate_offsets(root);
+    debug_print("applying offsets\n");
     apply_offsets(root, 0., 0.);
+    debug_print("centering\n");
     center_on_selected(root, graph.selected->pos.x, graph.selected->pos.y);
+    debug_print("positions calculated\n");
 }
 
 /* Debug function, used to print locations of all nodes in indented hierarchy */
@@ -680,7 +693,7 @@ void insertArray(Array *a, void* element) {
     }
     a->array[a->num++] = element;
 }
-void* removeFromArray(Array *a, Node* node){
+void removeFromArray(Array *a, Node* node){
     bool start_shifting = false;
     Node** nodes = a->array;
     for (int i = 0; i < a->num; ++i) {
@@ -689,13 +702,10 @@ void* removeFromArray(Array *a, Node* node){
         if ( start_shifting )
             nodes[i] = nodes[i+1];
     }
-    if (a->num > 0){
-        void* ret = a->array[a->num];
+    if (a->num > 0 && start_shifting){
         a->array[a->num] = NULL;
         a->num -= 1;
-        return ret;
     }
-    return NULL;
 }
 
 void* freeArray(Array *a) {
@@ -738,8 +748,11 @@ void deleteNode(Node* node){
 
     /* Then delete node */
     debug_print("deleting node %p\n", node);
+    debug_print("freeing children\n");
     freeArray(node->children);
+    debug_print("freeing buffer\n");
     free(node->text.buf);
+    debug_print("freeing hint_text\n");
     free(node->hint_text);
     free(node);
     debug_print("deleted node %p\n", node);
@@ -747,12 +760,14 @@ void deleteNode(Node* node){
 
 void removeNodeFromGraph(Node* node){
 
+    debug_print("removing node from graph\n");
     // remove node from array
     removeFromArray(node->p->children, node);
     removeFromArray(HINT_NODES, node);
     if ( node == graph.selected )
         graph.selected = node->p;
     deleteNode(node);
+    debug_print("removed node from graph\n");
 }
 
 void makeGraph(){
