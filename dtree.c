@@ -3,8 +3,8 @@
 //   - qol: remove hint text that doesn't match current buffer
 //   - add, copy, paste functionality
 // - bugfixes
-// - figure out what to do with modes
-// - add "move" operation"
+// - add left-align, right align, and center functionality for text, given a position
+// - change background color
 // NOTE:
 // SDLK is software character, SCANCODE is hardware
 #include <SDL2/SDL.h>
@@ -89,8 +89,8 @@ static int MAX_TEXT_LEN = 128;                              // Max Num of chars 
 // radius and thickness of node box
 static int RADIUS = 50;
 static int THICKNESS = 10;
-static int FONT_SIZE = 30;
-static char* FONT_NAME = "./assets/FiraSans-Regular.ttf";   // Default Font name
+static int FONT_SIZE = 20;
+static char* FONT_NAME = "./assets/FreeMono.otf";   // Default Font name
 static const char* HINT_CHARS = "asdfghjl;\0";              // characters to use for hints
 
 /* Globals */
@@ -101,6 +101,7 @@ static TTF_Font* FONT;          // Global Font object
 static Array* HINT_NODES;       // array of all nodes to be hinted to
 static Buffer* CURRENT_BUFFER;  // buffer to store current hint progress
 static Node* MOVE_SRC = NULL;
+static bool TOGGLE_MODE=0;
 
 void activateHints();
 void clearHintText();
@@ -221,19 +222,21 @@ bool isHintMode(enum Mode mode_param){
 // When a hint node is selected, this function is run
 void hintFunction(Node* node){
     switch(mode){
-        case Travel: graph.selected = node; return;
-        case Delete: removeNodeFromGraph(node); return;
-        case MoveSrc: MOVE_SRC = node; switch2(MoveDst); return;
+        case Travel: graph.selected = node; break;
+        case Delete: removeNodeFromGraph(node); break;
+        case MoveSrc: MOVE_SRC = node; switch2(MoveDst); break;
         case MoveDst:
             removeFromArray(MOVE_SRC->p->children, MOVE_SRC);
             insertArray(node->children, MOVE_SRC);
             MOVE_SRC->p = node;
             calculate_positions(graph.root, graph.selected);
             MOVE_SRC = NULL;
-            switch2(MoveSrc);
-            return;
+            switch2( MoveSrc );
+            break;
         default: break;
     }
+    if ( TOGGLE_MODE == false && mode != MoveDst )
+        switch2( Default );
 }
 
 
@@ -262,9 +265,7 @@ void initSDL() {
         printf("Failed to open %d x %d window: %s\n", SCREEN_WIDTH, SCREEN_HEIGHT, SDL_GetError());
         exit(1);
     }
-
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
-
+    /* SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear"); IDK what this does but the font looks nicer when it's not here*/
     debug_print("creating renderer\n");
     app.renderer = SDL_CreateRenderer(app.window, -1, rendererFlags);
     debug_print("created renderer\n");
@@ -322,6 +323,7 @@ void switch2(enum Mode to){
         case Default:
             CURRENT_BUFFER = NULL;
             mode = Default;
+            TOGGLE_MODE = 0;
             break;
         case FilenameEdit:
             mode = Edit;
@@ -364,12 +366,12 @@ void doKeyUp(SDL_KeyboardEvent *event) {
     case Default:
         switch(event->keysym.sym) {
             case SDLK_o: { makeChild(graph.selected); return; }
-            case SDLK_d: { removeNodeFromGraph(graph.selected); return; }
             case SDLK_t: { switch2(Travel); return; }
             case SDLK_e: { switch2(Edit); return; }
             case SDLK_r: { switch2(FilenameEdit); return; }
             case SDLK_x: { switch2(Delete); return; }
             case SDLK_m: { switch2(MoveSrc); return; }
+            case SDLK_c: { TOGGLE_MODE = 1; return; }
         }
         break; // end of Default bindings
     case Travel:
