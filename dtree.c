@@ -108,7 +108,6 @@ void clearHintText();
 double clip(double num, double min, double max);
 unsigned int countTabs(char* string);
 void deleteNode(Node* node);
-void doKeyDown(SDL_KeyboardEvent *event);
 void doKeyUp(SDL_KeyboardEvent *event);
 void drawCircle(SDL_Renderer *surface, int n_cx, int n_cy, int radius, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
 void drawNode(Node* node);
@@ -372,6 +371,7 @@ void doKeyUp(SDL_KeyboardEvent *event) {
             case SDLK_x: { switch2(Delete); return; }
             case SDLK_m: { switch2(MoveSrc); return; }
             case SDLK_c: { TOGGLE_MODE = 1; return; }
+            case SDLK_w: { write(); return; }
         }
         break; // end of Default bindings
     case Travel:
@@ -935,21 +935,14 @@ int main(int argc, char *argv[]) {
         SDL_Delay(0);
         debug_print("end loop\n");
     }
-    debug_print("saving...\n");
-    write();
-    debug_print("saved\n");
 
-    if (HINT_BUFFER.buf)
-        free(HINT_BUFFER.buf);
+    if (HINT_BUFFER.buf) free(HINT_BUFFER.buf);
     free(FILENAME_BUFFER.buf);
     /* delete nodes recursively, starting from root */
     deleteNode(graph.root);
     debug_print("deleted nodes\n");
-
     SDL_DestroyRenderer( app.renderer );
     SDL_DestroyWindow( app.window );
-
-    //Quit SDL subsystems
     SDL_Quit();
     return 0;
 }
