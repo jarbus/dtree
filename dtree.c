@@ -15,8 +15,6 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
-
-// Originally
 // https://stackoverflow.com/questions/1644868/define-macro-for-debug-printing-in-c
 // EDIT: https://stackoverflow.com/questions/1941307/debug-print-macro-in-c
 #ifdef DEBUG
@@ -79,10 +77,13 @@ struct Graph {
 };
 
 /* User Customizable Variables*/
-static Buffer HINT_BUFFER =     {NULL, 0, 2};               // {ptr, cur_len, max_size} for hints
-static Buffer FILENAME_BUFFER = {NULL, 0, 64};              // {ptr, cur_len, max_size} for fname
-static SDL_Color EDIT_COLOR = {255, 255, 255};              // RGB
-static SDL_Color HINT_COLOR = {255, 0, 0};                  // RGB
+static Buffer HINT_BUFFER =      {NULL, 0, 2};              // {ptr, cur_len, max_size} for hints
+static Buffer FILENAME_BUFFER =  {NULL, 0, 64};             // {ptr, cur_len, max_size} for fname
+static SDL_Color EDIT_COLOR =    {220, 220, 220};           // RGB
+static SDL_Color HINT_COLOR =    {220, 0, 0};               // RGB
+static int SELECTED_COLOR[4] =   {220, 0, 0, 0};
+static int UNSELECTED_COLOR[4] = {0, 220, 0, 0};
+static int BACKGROUND_COLOR[4] = {15, 15, 15, 255};
 static int TEXTBOX_WIDTH_SCALE = 40;                        // width of char
 static int TEXTBOX_HEIGHT = 100;                            // Heigh of char
 static int MAX_TEXT_LEN = 128;                              // Max Num of chars in a node
@@ -264,7 +265,6 @@ void initSDL() {
         printf("Failed to open %d x %d window: %s\n", SCREEN_WIDTH, SCREEN_HEIGHT, SDL_GetError());
         exit(1);
     }
-    /* SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear"); IDK what this does but the font looks nicer when it's not here*/
     debug_print("creating renderer\n");
     app.renderer = SDL_CreateRenderer(app.window, -1, rendererFlags);
     debug_print("created renderer\n");
@@ -503,9 +503,9 @@ void drawNode(Node* node) {
     debug_print("num children %lu\n", node->children->num);
     /* draw red ring for unselected nodes, green for selected */
     if (node != graph.selected)
-        drawBorder(app.renderer, x, y, node->text.len * TEXTBOX_WIDTH_SCALE, THICKNESS, 0xFF, 0x00, 0x00, 0x00);
+        drawBorder(app.renderer, x, y, node->text.len * TEXTBOX_WIDTH_SCALE, THICKNESS, UNSELECTED_COLOR[0], UNSELECTED_COLOR[1], UNSELECTED_COLOR[2], UNSELECTED_COLOR[3]);
     else
-        drawBorder(app.renderer, x, y, node->text.len * TEXTBOX_WIDTH_SCALE, THICKNESS, 0x00, 0xFF, 0x00, 0x00);
+        drawBorder(app.renderer, x, y, node->text.len * TEXTBOX_WIDTH_SCALE, THICKNESS, SELECTED_COLOR[0], SELECTED_COLOR[1], SELECTED_COLOR[2], SELECTED_COLOR[3]);
 
     Point message_pos;
     message_pos.x = x  - (int)((TEXTBOX_WIDTH_SCALE*node->text.len) / 2);
@@ -637,7 +637,7 @@ void recursively_print_positions(Node* node, int level){
 
 /* re-computes graph and draws everything onto renderer */
 void prepareScene() {
-    SDL_SetRenderDrawColor(app.renderer, 0, 0, 0, 255);
+    SDL_SetRenderDrawColor(app.renderer, BACKGROUND_COLOR[0], BACKGROUND_COLOR[1], BACKGROUND_COLOR[2], BACKGROUND_COLOR[3]); /* Background color */
     SDL_RenderClear(app.renderer);
 
     // recompute the coordinates of each node in the tree
