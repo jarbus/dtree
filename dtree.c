@@ -4,7 +4,7 @@
 //   - add, copy, paste functionality
 // - bugfixes
 // - add left-align, right align, and center functionality for text, given a position
-// - change background color
+// - fix key repeats
 // NOTE:
 // SDLK is software character, SCANCODE is hardware
 #include <SDL2/SDL.h>
@@ -81,16 +81,17 @@ static Buffer HINT_BUFFER =      {NULL, 0, 2};              // {ptr, cur_len, ma
 static Buffer FILENAME_BUFFER =  {NULL, 0, 64};             // {ptr, cur_len, max_size} for fname
 static SDL_Color EDIT_COLOR =    {220, 220, 220};           // RGB
 static SDL_Color HINT_COLOR =    {220, 0, 0};               // RGB
-static int SELECTED_COLOR[4] =   {220, 0, 0, 0};
-static int UNSELECTED_COLOR[4] = {0, 220, 0, 0};
+static int SELECTED_COLOR[4] =   {0, 220, 0, 0};
+static int UNSELECTED_COLOR[4] = {220, 0, 0, 0};
 static int BACKGROUND_COLOR[4] = {15, 15, 15, 255};
-static int TEXTBOX_WIDTH_SCALE = 40;                        // width of char
+static int TEXTBOX_WIDTH_SCALE = 50;                        // width of char
 static int TEXTBOX_HEIGHT = 100;                            // Heigh of char
 static int MAX_TEXT_LEN = 128;                              // Max Num of chars in a node
+static int NUM_CHARS_B4_WRAP = 15;
 // radius and thickness of node box
 static int RADIUS = 50;
 static int THICKNESS = 10;
-static int FONT_SIZE = 20;
+static int FONT_SIZE = 85;
 static char* FONT_NAME = "./assets/FreeMono.otf";   // Default Font name
 static const char* HINT_CHARS = "asdfghjl;\0";              // characters to use for hints
 
@@ -110,13 +111,15 @@ double clip(double num, double min, double max);
 unsigned int countTabs(char* string);
 void deleteNode(Node* node);
 void doKeyUp(SDL_KeyboardEvent *event);
-void drawCircle(SDL_Renderer *surface, int n_cx, int n_cy, int radius, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
+void drawBox(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
 void drawNode(Node* node);
-void drawBorder(SDL_Renderer *surface, int n_cx, int n_cy, int radius, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
+void drawBorder(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
 void endAtNewline(char* string, int textlen);
 void eventHandler(SDL_Event *event);
 void* freeArray(Array *a);
 char* getModeName();
+int getWidth (char* message, bool wrap);
+int getHeight (char* message, bool wrap);
 void handleTextInput(SDL_Event *event);
 Array* initArray(size_t initialSize);
 void initSDL();
@@ -135,7 +138,7 @@ void readfile();
 void recursively_print_positions(Node* node, int level);
 void removeFromArray(Array *a, Node* node);
 void removeNodeFromGraph(Node* node);
-void renderMessage(char* message, Point pos, double width, double height, SDL_Color color);
+void renderMessage(char* message, Point pos, double scale, SDL_Color color, bool wrap);
 void set_pixel(SDL_Renderer *rend, int x, int y, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
 void switch2(enum Mode to);
 void update_pos_children(Node* node, double leftmost_bound, double rightmost_bound, double level);
@@ -245,6 +248,7 @@ double clip(double num, double min, double max){
     if ( num > max ) return max;
     return num;
 }
+int min(int a, int b){ if (a < b ) return a; else return b; }
 
 void initSDL() {
     HINT_NODES = initArray(10);
@@ -282,24 +286,7 @@ void initSDL() {
         return;
     }
     atexit(TTF_Quit); /* remember to quit SDL_ttf */
-
-    //this opens a font style and sets a size
     FONT = TTF_OpenFont(FONT_NAME, FONT_SIZE);
-
-    debug_print("TTF_FontHeight          : %d\n",TTF_FontHeight(FONT));
-    debug_print("TTF_FontAscent          : %d\n",TTF_FontAscent(FONT));
-    debug_print("TTF_FontDescent         : %d\n",TTF_FontDescent(FONT));
-    debug_print("TTF_FontLineSkip        : %d\n",TTF_FontLineSkip(FONT));
-    debug_print("TTF_FontFaceIsFixedWidth: %d\n",TTF_FontFaceIsFixedWidth(FONT));
-
-    char *str=TTF_FontFaceFamilyName(FONT);
-    if(!str)
-        str="(null)";
-    debug_print("TTF_FontFaceFamilyName  : \"%s\"\n",str);
-
-    if(FONT == NULL) {
-        printf("TTF_OpenFont: %s\n", TTF_GetError());
-    }
 }
 
 void activateHints(){
@@ -477,19 +464,19 @@ void set_pixel(SDL_Renderer *rend, int x, int y, Uint8 r, Uint8 g, Uint8 b, Uint
 }
 
 
-void drawBox(SDL_Renderer *surface, int n_cx, int n_cy, int len, int offset, Uint8 r, Uint8 g, Uint8 b, Uint8 a){
+void drawBox(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int offset, Uint8 r, Uint8 g, Uint8 b, Uint8 a){
     SDL_Rect rect;
     rect.x = (int) n_cx - ( len  / 2 )  - offset;
-    rect.y = (int) n_cy - ( TEXTBOX_HEIGHT / 2 ) - offset;
+    rect.y = (int) n_cy - ( height / 2 ) - offset;
     rect.w = len + offset + offset;
-    rect.h = TEXTBOX_HEIGHT + offset + offset;
+    rect.h = height + offset + offset;
     SDL_SetRenderDrawColor(surface, r, g, b, a);
     SDL_RenderDrawRect(surface, &rect);
 }
 
-void drawBorder(SDL_Renderer *surface, int n_cx, int n_cy, int len, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a){
+void drawBorder(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a){
     for (int i = 0; i < thickness; ++i)
-        drawBox(surface, n_cx, n_cy, len, i, r, g, b, a);
+        drawBox(surface, n_cx , n_cy, len, height, i, r, g, b, a);
 }
 
 /* Renders each node, then renders it's children and draws lines to the children */
@@ -503,22 +490,22 @@ void drawNode(Node* node) {
     debug_print("num children %lu\n", node->children->num);
     /* draw red ring for unselected nodes, green for selected */
     if (node != graph.selected)
-        drawBorder(app.renderer, x, y, node->text.len * TEXTBOX_WIDTH_SCALE, THICKNESS, UNSELECTED_COLOR[0], UNSELECTED_COLOR[1], UNSELECTED_COLOR[2], UNSELECTED_COLOR[3]);
+        drawBorder(app.renderer, x, y, getWidth(node->text.buf, 1), getHeight(node->text.buf, 1), THICKNESS, UNSELECTED_COLOR[0], UNSELECTED_COLOR[1], UNSELECTED_COLOR[2], UNSELECTED_COLOR[3]);
     else
-        drawBorder(app.renderer, x, y, node->text.len * TEXTBOX_WIDTH_SCALE, THICKNESS, SELECTED_COLOR[0], SELECTED_COLOR[1], SELECTED_COLOR[2], SELECTED_COLOR[3]);
+        drawBorder(app.renderer, x, y, getWidth(node->text.buf, 1), getHeight(node->text.buf, 1), THICKNESS, SELECTED_COLOR[0], SELECTED_COLOR[1], SELECTED_COLOR[2], SELECTED_COLOR[3]);
 
     Point message_pos;
-    message_pos.x = x  - (int)((TEXTBOX_WIDTH_SCALE*node->text.len) / 2);
-    message_pos.y = y  - (int)(TEXTBOX_HEIGHT / 2);
+    message_pos.x = x - (getWidth(node->text.buf, 1) / 2);
+    message_pos.y = y - (getHeight(node->text.buf, 1) / 2);
 
     /* render node text */
-    renderMessage(node->text.buf, message_pos, TEXTBOX_WIDTH_SCALE*node->text.len, TEXTBOX_HEIGHT, EDIT_COLOR);
+    renderMessage(node->text.buf, message_pos, 1.0, EDIT_COLOR, 1);
     /* render hint text */
     if ( isHintMode(mode) && strlen(node->hint_text) > 0 ){
         // position char in center of node
         message_pos.x = x  - (int)((TEXTBOX_WIDTH_SCALE) / 2) - RADIUS;
         message_pos.y = y  - (int)(TEXTBOX_HEIGHT / 2) - RADIUS;
-        renderMessage(node->hint_text, message_pos, TEXTBOX_WIDTH_SCALE * 0.5, TEXTBOX_HEIGHT * 0.5, HINT_COLOR);
+        renderMessage(node->hint_text, message_pos, 0.5, HINT_COLOR, 0);
     }
 
     /* draw edges between parent and child nodes */
@@ -531,12 +518,47 @@ void drawNode(Node* node) {
     }
 }
 
-void renderMessage(char* message, Point pos, double width, double height, SDL_Color color){
-    if (!message) return;
+int getWidth (char* message, bool wrap){
+    int ret;
+    if ( wrap )
+        ret = min(strlen(message), NUM_CHARS_B4_WRAP) * TEXTBOX_WIDTH_SCALE;
+    else
+        ret = strlen(message) * TEXTBOX_WIDTH_SCALE;
+    debug_print("getWidth %d\n", ret);
+    return ret;
+}
+int getHeight (char* message, bool wrap){
+    if ( wrap ){
+        int num_lines=1, chars_since_line_start=1, chars_since_last_space=0;
+        for (int i = 0; i < strlen(message); ++i) {
+            if ( chars_since_line_start == NUM_CHARS_B4_WRAP ) {
+                chars_since_line_start = chars_since_last_space;
+                num_lines++;
+            }
+            if ( message[i] == ' ' )
+                chars_since_last_space = 0;
+            if ( message[i] == '\n' ){
+                chars_since_last_space = 0;
+                chars_since_line_start = 0;
+            }
+            chars_since_line_start++;
+            chars_since_last_space++;
 
-    debug_print("rendering %s\n", message);
+        }
+        return TEXTBOX_HEIGHT * num_lines;
+    }
+    else
+        return TEXTBOX_HEIGHT;
+}
+
+void renderMessage(char* message, Point pos, double scale, SDL_Color color, bool wrap){
+    if (!message) return;
     // create surface from string
-    SDL_Surface* surfaceMessage = TTF_RenderText_Solid(FONT, message, color);
+    SDL_Surface* surfaceMessage;
+    if ( wrap )
+        surfaceMessage = TTF_RenderText_Blended_Wrapped(FONT, message, color, NUM_CHARS_B4_WRAP * TEXTBOX_WIDTH_SCALE * scale);
+    else
+        surfaceMessage = TTF_RenderText_Solid(FONT, message, color);
 
     // now you can convert it into a texture
     SDL_Texture* Message = SDL_CreateTextureFromSurface(app.renderer, surfaceMessage);
@@ -544,11 +566,10 @@ void renderMessage(char* message, Point pos, double width, double height, SDL_Co
     SDL_Rect Message_rect;
     Message_rect.x = pos.x;
     Message_rect.y = pos.y;
-    Message_rect.w = width;
-    Message_rect.h = height;
-
+    Message_rect.w = getWidth(message, wrap) * scale;
+    Message_rect.h = getHeight(message, wrap) * scale;
+    debug_print("rendering %s %d %d\n", message, Message_rect.w, Message_rect.h);
     SDL_RenderCopy(app.renderer, Message, NULL, &Message_rect);
-
     SDL_FreeSurface(surfaceMessage);
     SDL_DestroyTexture(Message);
 }
@@ -654,20 +675,20 @@ void prepareScene() {
     Point filename_pos;
     filename_pos.x = (int) ((0.0) * app.window_size.x);
     filename_pos.y = (int) ((0.9) * app.window_size.y);
-    renderMessage(FILENAME_BUFFER.buf, filename_pos, strlen(FILENAME_BUFFER.buf) * TEXTBOX_WIDTH_SCALE, TEXTBOX_HEIGHT, EDIT_COLOR);
+    renderMessage(FILENAME_BUFFER.buf, filename_pos, 1.0, EDIT_COLOR, 0);
 
     // Draw mode
     Point mode_text_pos;
     mode_text_pos.x = (int) ((0.0) * app.window_size.x);
     mode_text_pos.y = (int) ((0.0) * app.window_size.y);
     debug_print("rendering %s\n", getModeName());
-    renderMessage(getModeName(), mode_text_pos, strlen(getModeName()) * TEXTBOX_WIDTH_SCALE, TEXTBOX_HEIGHT, EDIT_COLOR);
+    renderMessage(getModeName(), mode_text_pos, 1.0, EDIT_COLOR, 0);
 
     //Draw hint buffer
     Point hint_buf_pos;
     hint_buf_pos.x = (int) ((1.0 * app.window_size.x) - (HINT_BUFFER.len * TEXTBOX_WIDTH_SCALE));
     hint_buf_pos.y = (int) ((0.9) * app.window_size.y);
-    renderMessage(HINT_BUFFER.buf, hint_buf_pos, HINT_BUFFER.len * TEXTBOX_WIDTH_SCALE, TEXTBOX_HEIGHT, HINT_COLOR);
+    renderMessage(HINT_BUFFER.buf, hint_buf_pos, 1.0, HINT_COLOR, 0);
 }
 
 /* actually renders the screen */
