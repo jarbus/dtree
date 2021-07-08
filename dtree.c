@@ -111,6 +111,7 @@ double clip(double num, double min, double max);
 unsigned int countTabs(char* string);
 void deleteNode(Node* node);
 void doKeyUp(SDL_KeyboardEvent *event);
+void doKeyDown(SDL_KeyboardEvent *event);
 void drawBox(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
 void drawNode(Node* node);
 void drawBorder(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
@@ -328,6 +329,19 @@ void switch2(enum Mode to){
         activateHints();
 }
 
+void doKeyDown(SDL_KeyboardEvent *event) {
+    if (event->repeat != 0) {
+        if ( mode == Edit){
+            switch(event->keysym.sym) {
+                case SDLK_BACKSPACE:
+                    if ( CURRENT_BUFFER && CURRENT_BUFFER->len >= 0)
+                        CURRENT_BUFFER->buf[--CURRENT_BUFFER->len] = '\0';
+            }
+        }
+        return;
+    }
+}
+
 void doKeyUp(SDL_KeyboardEvent *event) {
     if (event->repeat != 0) {
         return;
@@ -344,6 +358,10 @@ void doKeyUp(SDL_KeyboardEvent *event) {
         case SDLK_BACKSPACE:
             if ( CURRENT_BUFFER && CURRENT_BUFFER->len >= 0)
                 CURRENT_BUFFER->buf[--CURRENT_BUFFER->len] = '\0';
+            return;
+        case SDLK_RETURN:
+            if ( CURRENT_BUFFER && CURRENT_BUFFER->len >= 0)
+                CURRENT_BUFFER->buf[CURRENT_BUFFER->len++] = '\n';
             return;
     }
 
@@ -389,6 +407,10 @@ void eventHandler(SDL_Event *event) {
 
         case SDL_KEYUP:
             doKeyUp(&event->key);
+            break;
+
+        case SDL_KEYDOWN:
+            doKeyDown(&event->key);
             break;
 
         case SDL_WINDOWEVENT:
