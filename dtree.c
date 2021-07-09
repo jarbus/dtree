@@ -64,9 +64,9 @@ struct Node {
     struct Node* p;
     struct Array* children;
     struct Point pos;
-    float x_offset; /* offset wrt parent; "mod" in tree drawing algos */
-    float rightmost; /* greatest descendant accumulated x_off wrt node*/
-    float leftmost; /* smallest (negative) acc. x_off wrt node */
+    int x_offset; /* offset wrt parent; "mod" in tree drawing algos */
+    int rightmost; /* greatest descendant accumulated x_off wrt node*/
+    int leftmost; /* smallest (negative) acc. x_off wrt node */
     struct Buffer text;
     char* hint_text;
 };
@@ -128,8 +128,10 @@ void insertArray(Array *a, void* element);
 bool isHintMode(enum Mode mode_param);
 Node* makeNode();
 Node* makeChild(Node* parent);
-void calculate_offsets(Node* node);
-void apply_offsets(Node* node, double depth, double offset);
+int get_depth(Node* node);
+void calculate_x_offsets(Node* node);
+void calculate_max_heights(Node* node, int level, int* max_heights);
+void apply_offsets(Node* node, int x_offset, int level, int* y_levels);
 void center_on_selected(Node* node, int selected_x, int selected_y);
 void calculate_positions(Node* root, Node* selected);
 void populateHintText(Node* node);
@@ -596,22 +598,36 @@ void renderMessage(char* message, Point pos, double scale, SDL_Color color, bool
     SDL_DestroyTexture(Message);
 }
 
+
+// returns the height of the tree with given root node 
+int get_depth(Node* node) {
+    int max_depth = 0;
+    for(int i = 0; i < node->children->num; i++) {
+        int child_depth = get_depth(node->children->array[i]);
+        if (max_depth < child_depth) {
+            max_depth = child_depth;
+        }
+    }
+    return 1 + max_depth;
+}
+
 // recursive helper function for calculate_positions
 // shifts over subtrees so that they do not overlap at any x-coordinate
-void calculate_offsets(Node* node) {
+void calculate_x_offsets(Node* node) {
     debug_print("calculating offsets for %p\n", node);
+    int text_pixel_length = getWidth(node->text.buf, true);
     node -> x_offset  = 0;
-    node -> rightmost = 0;
-    node -> leftmost  = 0;
-    double total_offset = 0;
+    node -> rightmost = text_pixel_length/2;
+    node -> leftmost  = -text_pixel_length/2;
+    int total_offset = 0;
     debug_print("shifting %ld children for node with text %s\n", node->children->num, node->text.buf);
     for (int i = 0; i < node->children->num; i++) {
         Node* child = node->children->array[i];
-        calculate_offsets(child);
+        calculate_x_offsets(child);
         if (i > 0) {
             // shift the current child (more than) far enough away from the
             // previous to guarantee that they subtrees will not overlap
-            double offset = (node->children->array[i-1]->rightmost)-(child->leftmost)+1.;
+            int offset = (node->children->array[i-1]->rightmost)-(child->leftmost)+RADIUS;
             total_offset += offset;
             child->x_offset = total_offset;
         }
@@ -620,26 +636,45 @@ void calculate_offsets(Node* node) {
     // center parent over children
     for (int i = 0; i < node->children->num; i++) {
         Node* child = node->children->array[i];
-        child->x_offset -= total_offset/2.;
+        child->x_offset -= total_offset/2;
     }
     // calculate leftmost and rightmost for current node
     debug_print("calculating left and rightmost children\n");
     if(node->children->num >= 1) {
         Node* leftmost_child = node->children->array[0];
-        node->leftmost = leftmost_child->x_offset + leftmost_child->leftmost;
+        int child_leftmost = leftmost_child->x_offset + leftmost_child->leftmost;
+        if(child_leftmost < node->leftmost) {
+            node->leftmost = child_leftmost;
+        }
+
         Node* rightmost_child = node->children->array[node->children->num-1];
-        node->rightmost = rightmost_child->x_offset + rightmost_child->rightmost;
+        int child_rightmost = rightmost_child->x_offset + rightmost_child->rightmost;
+        if(child_rightmost > node->rightmost) {
+            node->rightmost = child_rightmost;
+        }
+    }
+}
+
+void calculate_max_heights(Node* node, int level, int* max_heights) {
+    int node_height = getHeight(node->text.buf, true)+RADIUS;
+    if (node_height > max_heights[level]) {
+        max_heights[level] = node_height;
+    }
+    for(int i = 0; i < node->children->num; i++) {
+        calculate_max_heights(node->children->array[i], level+1, max_heights);
     }
 }
 
 // recursive helper function for calculate_positions
 // accumulates offsets to assign correct [x,y] values to each node
-void apply_offsets(Node* node, double depth, double offset) {
-    node->pos.x = (int)(offset*2.5*RADIUS + app.window_size.x/2);
-    node->pos.y = (int)(2.5*RADIUS*(depth+1.));
+void apply_offsets(Node* node, int x_offset, int level, int* y_levels) {
+    node->pos.x = x_offset + app.window_size.x/2;
+    if (level > 0) {
+        node->pos.y = node->p->pos.y + y_levels[level-1]/2 + y_levels[level]/2;
+    }
     for (int i = 0; i < node->children->num; i++) {
         Node* child = node->children->array[i];
-        apply_offsets(child, depth+1., offset + child->x_offset);
+        apply_offsets(child, x_offset + child->x_offset, level+1, y_levels);
     }
 }
 
@@ -656,13 +691,19 @@ void center_on_selected(Node* node, int selected_x, int selected_y) {
 // recomputes the coordinates of the nodes (i.e. populates pos field)
 void calculate_positions(Node* root, Node* selected){
 
+    int* y_levels = calloc(1+get_depth(root), sizeof(int));
+
     debug_print("calculating offsets\n");
-    calculate_offsets(root);
+    calculate_x_offsets(root);
+    debug_print("calculating y levels\n");
+    calculate_max_heights(root, 0, y_levels);
     debug_print("applying offsets\n");
-    apply_offsets(root, 0., 0.);
+    apply_offsets(root, 0, 0, y_levels);
     debug_print("centering\n");
     center_on_selected(root, graph.selected->pos.x, graph.selected->pos.y);
     debug_print("positions calculated\n");
+
+    free(y_levels);
 }
 
 /* Debug function, used to print locations of all nodes in indented hierarchy */
