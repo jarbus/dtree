@@ -2,9 +2,10 @@
 // - hint mode
 //   - qol: remove hint text that doesn't match current buffer
 //   - add, copy, paste functionality
-// - bugfixes
 // - add left-align, right align, and center functionality for text, given a position
-// - make travel mode default mode
+// - remove unnecessary frees
+// - add way to delete all text in a buffer
+// - make-child mode
 // NOTE:
 // SDLK is software character, SCANCODE is hardware
 #include <SDL2/SDL.h>
@@ -34,7 +35,7 @@ typedef struct DoublePoint DoublePoint;
 typedef struct App App;
 typedef struct Buffer Buffer;
 
-enum Mode{Default, Edit, FilenameEdit, Travel, Delete, MoveSrc, MoveDst};
+enum Mode{Travel, Edit, FilenameEdit, Delete, MoveSrc, MoveDst};
 struct Point {
     int x;
     int y;
@@ -98,7 +99,7 @@ static const char* HINT_CHARS = "asdfghjl;\0";              // characters to use
 /* Globals */
 static App app;                 // App object that contains rendering info
 static Graph graph;             // Graph object that contains nodes
-static enum Mode mode = Default;// Global mode, initialized to default
+static enum Mode mode = Travel;// Global mode
 static TTF_Font* FONT;          // Global Font object
 static Array* HINT_NODES;       // array of all nodes to be hinted to
 static Buffer* CURRENT_BUFFER;  // buffer to store current hint progress
@@ -107,6 +108,7 @@ static bool TOGGLE_MODE=0;
 
 void activateHints();
 void clearHintText();
+void clearBuffer(Buffer* HINT_BUFFER);
 double clip(double num, double min, double max);
 unsigned int countTabs(char* string);
 void deleteNode(Node* node);
@@ -204,7 +206,6 @@ void write(){
 
 char* getModeName(){
     switch(mode) {
-        case Default: return "DEFAULT";
         case Edit: return "EDIT";
         case Travel: return "TRAVEL";
         case Delete: return "DELETE";
@@ -242,7 +243,7 @@ void hintFunction(Node* node){
         default: break;
     }
     if ( TOGGLE_MODE == false && mode != MoveDst )
-        switch2( Default );
+        switch2( Travel );
 }
 
 
@@ -300,19 +301,12 @@ void activateHints(){
 void switch2(enum Mode to){
     if ( isHintMode(mode) ){
         HINT_NODES = freeArray (HINT_NODES);
-        HINT_BUFFER.len = 0;
-        if ( HINT_BUFFER.buf ) free(HINT_BUFFER.buf);
-        HINT_BUFFER.buf = calloc(HINT_BUFFER.size, sizeof(char));
+        clearBuffer(&HINT_BUFFER);
     }
     switch ( to ){
         case Edit:
             mode = Edit;
             CURRENT_BUFFER = &graph.selected->text;
-            break;
-        case Default:
-            CURRENT_BUFFER = NULL;
-            mode = Default;
-            TOGGLE_MODE = 0;
             break;
         case FilenameEdit:
             mode = Edit;
@@ -355,7 +349,7 @@ void doKeyUp(SDL_KeyboardEvent *event) {
     // up-front key-checks that apply to any mode
     switch(event->keysym.sym) {
         case SDLK_ESCAPE:
-            switch2(Default);
+            switch2(Travel);
             return;
         case SDLK_BACKSPACE:
             if ( CURRENT_BUFFER && CURRENT_BUFFER->len >= 0)
@@ -369,10 +363,9 @@ void doKeyUp(SDL_KeyboardEvent *event) {
 
     // mode-specific key-bindings
     switch(mode) {
-    case Default:
+    case Travel:
         switch(event->keysym.sym) {
-            case SDLK_o: { makeChild(graph.selected); return; }
-            case SDLK_t: { switch2(Travel); return; }
+            case SDLK_o: { makeChild(graph.selected); activateHints(); return; }
             case SDLK_e: { switch2(Edit); return; }
             case SDLK_r: { switch2(FilenameEdit); return; }
             case SDLK_x: { switch2(Delete); return; }
@@ -380,22 +373,13 @@ void doKeyUp(SDL_KeyboardEvent *event) {
             case SDLK_c: { TOGGLE_MODE = 1; return; }
             case SDLK_w: { write(); return; }
         }
-        break; // end of Default bindings
-    case Travel:
-        switch(event->keysym.sym) {
-            case SDLK_t: { switch2(Default); return;}
-            case SDLK_e:
-                switch2(Default); // exiting travel mode requires freeing some memory
-                switch2(Edit);
-                return;
-        }
         break; // end of Travel bindings
     case Edit: {
         return; // edit-mode specific key-binds don't really exist
     }
     case Delete: {
         switch(event->keysym.sym)
-            case SDLK_x: { switch2(Default); return; }
+            case SDLK_x: { switch2(Travel); return; }
     }
     default: break;
     }
@@ -466,10 +450,8 @@ void handleTextInput(SDL_Event *event){
            hintFunction(HINT_NODES->array[i]);
            // reset hint text
            debug_print("freeing hint chars\n");
-           if ( HINT_BUFFER.buf ) free( HINT_BUFFER.buf );
+           clearBuffer(&HINT_BUFFER);
            debug_print("freed hint chars\n");
-           HINT_BUFFER.buf = calloc(HINT_BUFFER.size, sizeof(char));
-           HINT_BUFFER.len = 0;
 
            debug_print("calculating positions\n");
            calculate_positions(graph.root, graph.selected);
@@ -513,22 +495,24 @@ void drawNode(Node* node) {
     debug_print("children %p\n", node->children);
     debug_print("num children %lu\n", node->children->num);
     /* draw red ring for unselected nodes, green for selected */
+    int width  = getWidth(node->text.buf, 1);
+    int height = getHeight(node->text.buf, 1);
     if (node != graph.selected)
-        drawBorder(app.renderer, x, y, getWidth(node->text.buf, 1), getHeight(node->text.buf, 1), THICKNESS, UNSELECTED_COLOR[0], UNSELECTED_COLOR[1], UNSELECTED_COLOR[2], UNSELECTED_COLOR[3]);
+        drawBorder(app.renderer, x, y, width, height, THICKNESS, UNSELECTED_COLOR[0], UNSELECTED_COLOR[1], UNSELECTED_COLOR[2], UNSELECTED_COLOR[3]);
     else
-        drawBorder(app.renderer, x, y, getWidth(node->text.buf, 1), getHeight(node->text.buf, 1), THICKNESS, SELECTED_COLOR[0], SELECTED_COLOR[1], SELECTED_COLOR[2], SELECTED_COLOR[3]);
+        drawBorder(app.renderer, x, y, width, height, THICKNESS, SELECTED_COLOR[0], SELECTED_COLOR[1], SELECTED_COLOR[2], SELECTED_COLOR[3]);
 
     Point message_pos;
-    message_pos.x = x - (getWidth(node->text.buf, 1) / 2);
-    message_pos.y = y - (getHeight(node->text.buf, 1) / 2);
+    message_pos.x = x - (width / 2);
+    message_pos.y = y - (height / 2);
 
     /* render node text */
     renderMessage(node->text.buf, message_pos, 1.0, EDIT_COLOR, 1);
     /* render hint text */
     if ( isHintMode(mode) && strlen(node->hint_text) > 0 ){
         // position char in center of node
-        message_pos.x = x  - (int)((TEXTBOX_WIDTH_SCALE) / 2) - RADIUS;
-        message_pos.y = y  - (int)(TEXTBOX_HEIGHT / 2) - RADIUS;
+        message_pos.x = x  - (int)(width / 2) - THICKNESS;
+        message_pos.y = y  - (int)(height / 2) - THICKNESS - RADIUS;
         renderMessage(node->hint_text, message_pos, 0.5, HINT_COLOR, 0);
     }
 
@@ -599,7 +583,7 @@ void renderMessage(char* message, Point pos, double scale, SDL_Color color, bool
 }
 
 
-// returns the height of the tree with given root node 
+// returns the height of the tree with given root node
 int get_depth(Node* node) {
     int max_depth = 0;
     for(int i = 0; i < node->children->num; i++) {
@@ -802,6 +786,12 @@ void* freeArray(Array *a) {
     return NULL;
 }
 
+void clearBuffer(Buffer* buffer){
+    for (int i = 0; i < buffer->len; ++i)
+        buffer->buf[i] = '\0';
+    buffer->len = 0;
+}
+
 /* creates a new node at the origin */
 Node* makeNode(){
     Node* node = malloc(sizeof(Node));
@@ -820,6 +810,7 @@ Node* makeChild(Node* parent){
     Node* child = makeNode();
     child->p = parent;
     insertArray(parent->children, child);
+    calculate_positions(graph.root, graph.selected);
     return child;
 }
 
@@ -861,7 +852,7 @@ void makeGraph(){
     graph.num_nodes = 0;
     graph.selected = graph.root;
     graph.root->p = graph.root;
-    mode = Default;
+    switch2(Travel);
 }
 
 void clearHintText() {
@@ -885,8 +876,7 @@ void clearHintText() {
     }
     // Clear hint node array
     debug_print("freeing HINT_NODES\n");
-    if ( HINT_NODES->array )
-        HINT_NODES = freeArray ( HINT_NODES );
+    HINT_NODES = freeArray ( HINT_NODES );
     debug_print("end clearHintText()\n");
 }
 
@@ -907,11 +897,8 @@ void populateHintNodes(Node* node){
 }
 
 void populateHintText(Node* node){
-    // Current method: add parent and children
-    // New method: add every node that is visible
     debug_print("populate start\n");
     clearHintText();
-
     HINT_NODES = initArray(10);
     populateHintNodes(graph.root);
     debug_print("cleared\n");
@@ -935,18 +922,15 @@ void populateHintText(Node* node){
         }
         prefix = queue[front++];
     }
-    debug_print("loop 1\n");
     for (int i = 0; i < front; ++i) {
         free(queue[i]);
     }
-    debug_print("loop 2, %ld HINT_NODES, front: %d back: %d\n", HINT_NODES->num, front, back);
     for (int i = 0; i < HINT_NODES->num; i++) {
         debug_print("%p: %s\n", HINT_NODES->array[i]->hint_text, queue[front + i]);
         strcpy(HINT_NODES->array[i]->hint_text, queue[front + i]);
         free(queue[front + i]);
         debug_print("freed\n");
     }
-    debug_print("loop 3\n");
     for (int i = front + HINT_NODES->num; i < back; ++i) {
         free(queue[i]);
     }
