@@ -4,7 +4,7 @@
 //   - add, copy, paste functionality
 // - bugfixes
 // - add left-align, right align, and center functionality for text, given a position
-// - fix key repeats
+// - make travel mode default mode
 // NOTE:
 // SDLK is software character, SCANCODE is hardware
 #include <SDL2/SDL.h>
