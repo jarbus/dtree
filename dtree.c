@@ -2,7 +2,8 @@
 // - hint mode
 //   - qol: remove hint text that doesn't match current buffer
 //   - add, copy, paste functionality
-// - add left-align, right align, and center functionality for text, given a position
+// - add left-align, right align, and center align for easy text writing
+// /enter functionality for text, given a position
 // - remove unnecessary frees
 // - add way to delete all text in a buffer
 // - make-child mode
@@ -127,6 +128,7 @@ void handleTextInput(SDL_Event *event);
 Array* initArray(size_t initialSize);
 void initSDL();
 void insertArray(Array *a, void* element);
+bool isEditMode(enum Mode mode_param);
 bool isHintMode(enum Mode mode_param);
 Node* makeNode();
 Node* makeChild(Node* parent);
@@ -222,6 +224,13 @@ bool isHintMode(enum Mode mode_param){
         case Delete: return true;
         case MoveSrc: return true;
         case MoveDst: return true;
+        default: return false;
+    }
+}
+bool isEditMode(enum Mode mode_param){
+    switch(mode_param){
+        case FilenameEdit: return true;
+        case Edit: return true;
         default: return false;
     }
 }
@@ -327,7 +336,7 @@ void switch2(enum Mode to){
 
 void doKeyDown(SDL_KeyboardEvent *event) {
     if (event->repeat != 0) {
-        if ( mode == Edit){
+        if ( isEditMode(mode) ){
             switch(event->keysym.sym) {
                 case SDLK_BACKSPACE:
                     if ( CURRENT_BUFFER && CURRENT_BUFFER->len >= 0)
@@ -351,14 +360,6 @@ void doKeyUp(SDL_KeyboardEvent *event) {
         case SDLK_ESCAPE:
             switch2(Travel);
             return;
-        case SDLK_BACKSPACE:
-            if ( CURRENT_BUFFER && CURRENT_BUFFER->len >= 0)
-                CURRENT_BUFFER->buf[--CURRENT_BUFFER->len] = '\0';
-            return;
-        case SDLK_RETURN:
-            if ( CURRENT_BUFFER && CURRENT_BUFFER->len >= 0)
-                CURRENT_BUFFER->buf[CURRENT_BUFFER->len++] = '\n';
-            return;
     }
 
     // mode-specific key-bindings
@@ -375,7 +376,16 @@ void doKeyUp(SDL_KeyboardEvent *event) {
         }
         break; // end of Travel bindings
     case Edit: {
-        return; // edit-mode specific key-binds don't really exist
+        switch(event->keysym.sym){
+            case SDLK_BACKSPACE:
+                if ( CURRENT_BUFFER && CURRENT_BUFFER->len >= 0)
+                    CURRENT_BUFFER->buf[--CURRENT_BUFFER->len] = '\0';
+                return;
+            case SDLK_RETURN:
+                if ( CURRENT_BUFFER && CURRENT_BUFFER->len >= 0)
+                    CURRENT_BUFFER->buf[CURRENT_BUFFER->len++] = '\n';
+                return;
+        }
     }
     case Delete: {
         switch(event->keysym.sym)
