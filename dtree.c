@@ -1,4 +1,5 @@
 // TODO
+// - fix edges + boundaries
 // - hint mode
 //   - qol: remove hint text that doesn't match current buffer
 //   - add, copy, paste functionality
@@ -499,10 +500,10 @@ void drawNode(Node* node) {
     /* draw red ring for unselected nodes, green for selected */
     int width  = getWidth(node->text.buf, 1);
     int height = getHeight(node->text.buf, 1);
-    if (node == graph.selected)
-        drawBorder(app.renderer, x, y, width, height, THICKNESS, SELECTED_COLOR[0], SELECTED_COLOR[1], SELECTED_COLOR[2], SELECTED_COLOR[3]);
-    else if (node == CUT)
+    if (node == CUT)
         drawBorder(app.renderer, x, y, width, height, THICKNESS, CUT_COLOR[0], CUT_COLOR[1], CUT_COLOR[2], CUT_COLOR[3]);
+    else if (node == graph.selected)
+        drawBorder(app.renderer, x, y, width, height, THICKNESS, SELECTED_COLOR[0], SELECTED_COLOR[1], SELECTED_COLOR[2], SELECTED_COLOR[3]);
     else
         drawBorder(app.renderer, x, y, width, height, THICKNESS, UNSELECTED_COLOR[0], UNSELECTED_COLOR[1], UNSELECTED_COLOR[2], UNSELECTED_COLOR[3]);
 
@@ -522,7 +523,7 @@ void drawNode(Node* node) {
 
     /* draw edges between parent and child nodes */
     if (node != graph.root)
-        SDL_RenderDrawLine(app.renderer, x, y, node->p->pos.x, node->p->pos.y);
+        SDL_RenderDrawLine(app.renderer, x, y - (height/2), node->p->pos.x, node->p->pos.y + (getHeight(node->p->text.buf, 1) / 2));
 
     for (int i=0; i<node->children->num; i++){
         debug_print("child %d / %lu: %p\n", i, node->children->num, node->children->array[i]);
