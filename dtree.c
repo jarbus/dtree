@@ -2,9 +2,9 @@
 // - hint mode
 //   - qol: remove hint text that doesn't match current buffer
 //   - add, copy, paste functionality
-// - add left-align, right align, and center align for easy text writing
 // - better enter functionality for text, given a position
 // - add a FILE-OPEN key: a node buffer will be a file name, and pressing a key on the node opens it
+// - make travel chars more readable
 // NOTE:
 // SDLK is software character, SCANCODE is hardware
 #include <SDL2/SDL.h>
@@ -105,6 +105,7 @@ static Array* HINT_NODES;       // array of all nodes to be hinted to
 static Buffer* CURRENT_BUFFER;  // buffer to store current hint progress
 static Node* CUT = NULL;
 static bool TOGGLE_MODE=0;
+static char* TOGGLE_INDICATOR = "MODE PERSIST\0";
 
 void activateHints();
 void clearHintText();
@@ -327,6 +328,7 @@ void switch2(enum Mode to){
         case Travel:
             if (mode == Travel) CUT = NULL; // clear cut node on a double escape
             mode = Travel;
+            TOGGLE_MODE = 0;
             break;
         case MakeChild: mode = MakeChild; break;
         case Delete:    mode = Delete; break;
@@ -739,6 +741,13 @@ void prepareScene() {
     hint_buf_pos.x = (int) ((1.0 * app.window_size.x) - (HINT_BUFFER.len * TEXTBOX_WIDTH_SCALE));
     hint_buf_pos.y = (int) ((0.9) * app.window_size.y);
     renderMessage(HINT_BUFFER.buf, hint_buf_pos, 1.0, HINT_COLOR, 0);
+
+    if ( TOGGLE_MODE ){
+        Point toggle_indicator_pos;
+        toggle_indicator_pos.x = (int) ((1.0 * app.window_size.x) - (strlen(TOGGLE_INDICATOR) * TEXTBOX_WIDTH_SCALE));
+        toggle_indicator_pos.y = (int) ((0.0) * app.window_size.y);
+        renderMessage(TOGGLE_INDICATOR, toggle_indicator_pos, 1.0, EDIT_COLOR, 0);
+    }
 }
 
 /* actually renders the screen */
