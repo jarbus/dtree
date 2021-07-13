@@ -17,7 +17,8 @@ In Travel Mode:
 * `k` : select the parent node of the current node
 * `e` : edit current node's text
 * `x` : activate delete mode for one node
-* `m` : activate move mode for one node
+* `m` : activate cut mode for one node
+* `p` : activate paste mode for one node
 * `c` : persist the next mode
 * `r` : edit file name
 * `w` : save file
@@ -39,5 +40,8 @@ In Travel Mode:
 In Delete Mode:
     - press hint keys to delete the corresponding node
 
-In Move Mode:
-    - press hint keys to select a node to move, then again to select a target parent
+In Cut Mode:
+    - press hint keys to select a node to cut
+
+In Paste Mode:
+    - select a new parent for the cut node

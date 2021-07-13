@@ -5,8 +5,10 @@
 // - add left-align, right align, and center align for easy text writing
 // /enter functionality for text, given a position
 // - remove unnecessary frees
-// - add way to delete all text in a buffer
+// - add way to delete all text in a buffer (press d, clear buffer, then enter edit mode
 // - make-child mode
+// - switch to cut-and paste operation for node moving (just allow user to switch between src and dst)
+// - add a FILE-OPEN key: a node buffer will be a file name, and pressing a key on the node opens it
 // NOTE:
 // SDLK is software character, SCANCODE is hardware
 #include <SDL2/SDL.h>
@@ -36,7 +38,7 @@ typedef struct DoublePoint DoublePoint;
 typedef struct App App;
 typedef struct Buffer Buffer;
 
-enum Mode{Travel, Edit, FilenameEdit, Delete, MoveSrc, MoveDst};
+enum Mode{Travel, Edit, FilenameEdit, Delete, Cut, Paste};
 struct Point {
     int x;
     int y;
@@ -85,6 +87,7 @@ static SDL_Color EDIT_COLOR =    {220, 220, 220};           // RGB
 static SDL_Color HINT_COLOR =    {220, 0, 0};               // RGB
 static int SELECTED_COLOR[4] =   {0, 220, 0, 0};
 static int UNSELECTED_COLOR[4] = {220, 0, 0, 0};
+static int CUT_COLOR[4] =   {0, 0, 220, 0};
 static int BACKGROUND_COLOR[4] = {15, 15, 15, 255};
 static int TEXTBOX_WIDTH_SCALE = 50;                        // width of char
 static int TEXTBOX_HEIGHT = 100;                            // Heigh of char
@@ -104,7 +107,7 @@ static enum Mode mode = Travel;// Global mode
 static TTF_Font* FONT;          // Global Font object
 static Array* HINT_NODES;       // array of all nodes to be hinted to
 static Buffer* CURRENT_BUFFER;  // buffer to store current hint progress
-static Node* MOVE_SRC = NULL;
+static Node* CUT = NULL;
 static bool TOGGLE_MODE=0;
 
 void activateHints();
@@ -212,8 +215,8 @@ char* getModeName(){
         case Travel: return "TRAVEL";
         case Delete: return "DELETE";
         case FilenameEdit: return "FILENAME EDIT";
-        case MoveSrc: return "MOVE SOURCE";
-        case MoveDst: return "MOVE DEST";
+        case Cut: return "Cut";
+        case Paste: return "Paste";
         default: return NULL;
     }
 }
@@ -222,8 +225,8 @@ bool isHintMode(enum Mode mode_param){
     switch(mode_param){
         case Travel: return true;
         case Delete: return true;
-        case MoveSrc: return true;
-        case MoveDst: return true;
+        case Cut: return true;
+        case Paste: return true;
         default: return false;
     }
 }
@@ -240,18 +243,19 @@ void hintFunction(Node* node){
     switch(mode){
         case Travel: graph.selected = node; break;
         case Delete: removeNodeFromGraph(node); break;
-        case MoveSrc: MOVE_SRC = node; switch2(MoveDst); break;
-        case MoveDst:
-            removeFromArray(MOVE_SRC->p->children, MOVE_SRC);
-            insertArray(node->children, MOVE_SRC);
-            MOVE_SRC->p = node;
+        case Cut: CUT = node; switch2(Paste); break;
+        case Paste:
+            if ( !CUT ) break;
+            removeFromArray(CUT->p->children, CUT);
+            insertArray(node->children, CUT);
+            CUT->p = node;
             calculate_positions(graph.root, graph.selected);
-            MOVE_SRC = NULL;
-            switch2( MoveSrc );
+            CUT = NULL;
+            switch2( Cut );
             break;
         default: break;
     }
-    if ( TOGGLE_MODE == false && mode != MoveDst )
+    if ( TOGGLE_MODE == false && mode != Paste )
         switch2( Travel );
 }
 
@@ -322,13 +326,16 @@ void switch2(enum Mode to){
             CURRENT_BUFFER = &FILENAME_BUFFER;
             break;
         case Travel:
-            mode = Travel; break;
+            if (mode == Travel)
+                CUT = NULL; // clear cut node on a double escape
+            mode = Travel;
+                break;
         case Delete:
             mode = Delete; break;
-        case MoveSrc:
-            mode = MoveSrc; break;
-        case MoveDst:
-            mode = MoveDst; break;
+        case Cut:
+            mode = Cut; break;
+        case Paste:
+            mode = Paste; break;
     }
     if ( isHintMode(to) )
         activateHints();
@@ -370,7 +377,8 @@ void doKeyUp(SDL_KeyboardEvent *event) {
             case SDLK_e: { switch2(Edit); return; }
             case SDLK_r: { switch2(FilenameEdit); return; }
             case SDLK_x: { switch2(Delete); return; }
-            case SDLK_m: { switch2(MoveSrc); return; }
+            case SDLK_m: { switch2(Cut); return; }
+            case SDLK_p: { switch2(Paste); return; }
             case SDLK_c: { TOGGLE_MODE = 1; return; }
             case SDLK_w: { write(); return; }
         }
@@ -397,29 +405,15 @@ void doKeyUp(SDL_KeyboardEvent *event) {
 
 void eventHandler(SDL_Event *event) {
     switch (event->type){
-        case SDL_TEXTINPUT:
-            handleTextInput(event);
-            break;
-
-        case SDL_KEYUP:
-            doKeyUp(&event->key);
-            break;
-
-        case SDL_KEYDOWN:
-            doKeyDown(&event->key);
-            break;
-
+        case SDL_TEXTINPUT: { handleTextInput(event); break; }
+        case SDL_KEYUP:     { doKeyUp(&event->key);   break; }
+        case SDL_KEYDOWN:   { doKeyDown(&event->key); break; }
+        case SDL_QUIT:      { exit(0);                break; }
         case SDL_WINDOWEVENT:
-            if(event->window.event == SDL_WINDOWEVENT_RESIZED) {
+            if(event->window.event == SDL_WINDOWEVENT_RESIZED)
                 SDL_GetWindowSize(app.window, &app.window_size.x, &app.window_size.y);
-            }
             break;
-        case SDL_QUIT:
-            exit(0);
-            break;
-
-        default:
-            break;
+        default: break;
     }
 }
 
@@ -507,10 +501,12 @@ void drawNode(Node* node) {
     /* draw red ring for unselected nodes, green for selected */
     int width  = getWidth(node->text.buf, 1);
     int height = getHeight(node->text.buf, 1);
-    if (node != graph.selected)
-        drawBorder(app.renderer, x, y, width, height, THICKNESS, UNSELECTED_COLOR[0], UNSELECTED_COLOR[1], UNSELECTED_COLOR[2], UNSELECTED_COLOR[3]);
-    else
+    if (node == graph.selected)
         drawBorder(app.renderer, x, y, width, height, THICKNESS, SELECTED_COLOR[0], SELECTED_COLOR[1], SELECTED_COLOR[2], SELECTED_COLOR[3]);
+    else if (node == CUT)
+        drawBorder(app.renderer, x, y, width, height, THICKNESS, CUT_COLOR[0], CUT_COLOR[1], CUT_COLOR[2], CUT_COLOR[3]);
+    else
+        drawBorder(app.renderer, x, y, width, height, THICKNESS, UNSELECTED_COLOR[0], UNSELECTED_COLOR[1], UNSELECTED_COLOR[2], UNSELECTED_COLOR[3]);
 
     Point message_pos;
     message_pos.x = x - (width / 2);
