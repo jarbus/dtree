@@ -4,7 +4,8 @@
 //   - add, copy, paste functionality
 // - better enter functionality for text, given a position
 // - add a FILE-OPEN key: a node buffer will be a file name, and pressing a key on the node opens it
-// - make travel chars more readable
+// - make hint chars more readable
+// - make hint chars their own color
 // NOTE:
 // SDLK is software character, SCANCODE is hardware
 #include <SDL2/SDL.h>
@@ -82,7 +83,7 @@ static Buffer FILENAME_BUFFER =  {NULL, 0, 64};             // {ptr, cur_len, ma
 static SDL_Color EDIT_COLOR =    {220, 220, 220};           // RGB
 static SDL_Color HINT_COLOR =    {220, 0, 0};               // RGB
 static int SELECTED_COLOR[4] =   {0, 220, 0, 0};
-static int UNSELECTED_COLOR[4] = {220, 0, 0, 0};
+static int UNSELECTED_COLOR[4] = {0, 55, 0, 0};
 static int CUT_COLOR[4] =   {0, 0, 220, 0};
 static int BACKGROUND_COLOR[4] = {15, 15, 15, 255};
 static int TEXTBOX_WIDTH_SCALE = 50;                        // width of char
@@ -581,6 +582,9 @@ void renderMessage(char* message, Point pos, double scale, SDL_Color color, bool
     Message_rect.y = pos.y;
     Message_rect.w = getWidth(message, wrap) * scale;
     Message_rect.h = getHeight(message, wrap) * scale;
+
+    SDL_SetRenderDrawColor(app.renderer, BACKGROUND_COLOR[0], BACKGROUND_COLOR[1], BACKGROUND_COLOR[2], BACKGROUND_COLOR[3]);
+    SDL_RenderFillRect(app.renderer, &Message_rect);
     debug_print("rendering %s %d %d\n", message, Message_rect.w, Message_rect.h);
     SDL_RenderCopy(app.renderer, Message, NULL, &Message_rect);
     SDL_FreeSurface(surfaceMessage);
