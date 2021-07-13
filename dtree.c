@@ -540,7 +540,7 @@ int getWidth (char* message, bool wrap){
 }
 int getHeight (char* message, bool wrap){
     if ( wrap ){
-        int num_lines=1, chars_since_line_start=1, chars_since_last_space=0;
+        int num_lines=1, chars_since_line_start=0, chars_since_last_space=0;
         for (int i = 0; i < strlen(message); ++i) {
             if ( chars_since_line_start == NUM_CHARS_B4_WRAP ) {
                 chars_since_line_start = chars_since_last_space;
@@ -974,12 +974,12 @@ int main(int argc, char *argv[]) {
     makeGraph();
 
     FILENAME_BUFFER.buf = calloc(FILENAME_BUFFER.size, sizeof(char));
-    if ( argc > 1 ){
+    if ( argc > 1 )
         strcpy(FILENAME_BUFFER.buf, argv[1]);
-        readfile();
-    }
     else
         strcpy(FILENAME_BUFFER.buf, "unnamed.txt");
+
+    readfile();
     FILENAME_BUFFER.len = strlen(FILENAME_BUFFER.buf);
 
     HINT_BUFFER.buf = calloc(HINT_BUFFER.size + 1, sizeof(char));
