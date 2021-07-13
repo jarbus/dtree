@@ -4,7 +4,6 @@
 //   - add, copy, paste functionality
 // - add left-align, right align, and center align for easy text writing
 // - better enter functionality for text, given a position
-// - add way to delete all text in a buffer (press d, clear buffer, then enter edit mode
 // - add a FILE-OPEN key: a node buffer will be a file name, and pressing a key on the node opens it
 // NOTE:
 // SDLK is software character, SCANCODE is hardware
@@ -95,7 +94,7 @@ static int RADIUS = 50;
 static int THICKNESS = 10;
 static int FONT_SIZE = 85;
 static char* FONT_NAME = "./assets/FreeMono.otf";   // Default Font name
-static const char* HINT_CHARS = "asdfghjl;\0";              // characters to use for hints
+static const char* HINT_CHARS = "adfghjl;\0";              // characters to use for hints
 
 /* Globals */
 static App app;                 // App object that contains rendering info
@@ -149,7 +148,7 @@ void renderMessage(char* message, Point pos, double scale, SDL_Color color, bool
 void set_pixel(SDL_Renderer *rend, int x, int y, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
 void switch2(enum Mode to);
 void update_pos_children(Node* node, double leftmost_bound, double rightmost_bound, double level);
-void write();
+void write2File();
 void writeChildrenStrings(FILE* file, Node* node, int level);
 
 void readfile(){
@@ -199,7 +198,7 @@ void writeChildrenStrings(FILE* file, Node* node, int level){
         writeChildrenStrings(file, node->children->array[i], level + 1);
 }
 
-void write(){
+void write2File(){
     if ( FILENAME_BUFFER.buf == NULL ) return;
     FILE* output = fopen(FILENAME_BUFFER.buf, "w");
     writeChildrenStrings(output, graph.root, 0);
@@ -376,8 +375,9 @@ void doKeyUp(SDL_KeyboardEvent *event) {
             case SDLK_x: { switch2(Delete); return; }
             case SDLK_m: { switch2(Cut); return; }
             case SDLK_p: { switch2(Paste); return; }
+            case SDLK_s: { clearBuffer(&graph.selected->text); switch2(Edit); return; }
             case SDLK_c: { TOGGLE_MODE = 1; return; }
-            case SDLK_w: { write(); return; }
+            case SDLK_w: { write2File(); return; }
         }
         break; // end of Travel bindings
     case Edit: {

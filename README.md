@@ -14,7 +14,8 @@ The application provides 6 modes of interaction with the decision tree- `Travel`
 In Travel Mode:
 
 * `k` : select the parent node of the current node
-* `e` : edit current node's text
+* `e` : switch to Edit mode
+* `s` : clear the selected text, then switch to edit mode
 * `o` : activate MakeChild mode for one node
 * `x` : activate Delete mode for one node
 * `m` : activate Cut mode for one node
