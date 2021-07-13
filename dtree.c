@@ -1,11 +1,9 @@
 // TODO
-// - fix edges + boundaries
 // - hint mode
 //   - qol: remove hint text that doesn't match current buffer
 //   - add, copy, paste functionality
 // - add left-align, right align, and center align for easy text writing
-// /enter functionality for text, given a position
-// - remove unnecessary frees
+// - better enter functionality for text, given a position
 // - add way to delete all text in a buffer (press d, clear buffer, then enter edit mode
 // - add a FILE-OPEN key: a node buffer will be a file name, and pressing a key on the node opens it
 // NOTE:
@@ -842,6 +840,7 @@ void deleteNode(Node* node){
 
 void removeNodeFromGraph(Node* node){
 
+    if ( node == graph.root ) return;
     debug_print("removing node from graph\n");
     // remove node from array
     removeFromArray(node->p->children, node);
