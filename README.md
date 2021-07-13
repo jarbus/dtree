@@ -9,16 +9,16 @@ A minimal decision tree planning app
 * gcc
 
 # Usage
-The application provides 5 modes of interaction with the decision tree- `Default`, `Edit`, `Travel`, `Delete`, `Move`.
+The application provides 6 modes of interaction with the decision tree- `Travel`, `MakeChild`, `Edit`, `Delete`, `Cut`, `Paste`.
 
 In Travel Mode:
 
-* `o` : make a child node for the current node
 * `k` : select the parent node of the current node
 * `e` : edit current node's text
-* `x` : activate delete mode for one node
-* `m` : activate cut mode for one node
-* `p` : activate paste mode for one node
+* `o` : activate MakeChild mode for one node
+* `x` : activate Delete mode for one node
+* `m` : activate Cut mode for one node
+* `p` : activate Paste mode for one node
 * `c` : persist the next mode
 * `r` : edit file name
 * `w` : save file
@@ -35,13 +35,21 @@ In Edit Mode:
 Some modes allow you to select nodes by entering their corresponding red characters. These characters are called "Hint Keys" and modes that use hint keys to select nodes are called "Hint Modes".
 
 In Travel Mode:
-    - press hint keys in red to travel to corresponding node
+
+* press hint keys to travel to corresponding node
+
+In MakeChild Mode:
+
+* press hint keys to create a child of the corresponding node
 
 In Delete Mode:
-    - press hint keys to delete the corresponding node
+
+*  press hint keys to delete the corresponding node
 
 In Cut Mode:
-    - press hint keys to select a node to cut
+
+* press hint keys to select a node to cut
 
 In Paste Mode:
-    - select a new parent for the cut node
+
+* select a new parent for the cut node

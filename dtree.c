@@ -6,8 +6,6 @@
 // /enter functionality for text, given a position
 // - remove unnecessary frees
 // - add way to delete all text in a buffer (press d, clear buffer, then enter edit mode
-// - make-child mode
-// - switch to cut-and paste operation for node moving (just allow user to switch between src and dst)
 // - add a FILE-OPEN key: a node buffer will be a file name, and pressing a key on the node opens it
 // NOTE:
 // SDLK is software character, SCANCODE is hardware
@@ -38,7 +36,7 @@ typedef struct DoublePoint DoublePoint;
 typedef struct App App;
 typedef struct Buffer Buffer;
 
-enum Mode{Travel, Edit, FilenameEdit, Delete, Cut, Paste};
+enum Mode{Travel, Edit, FilenameEdit, Delete, Cut, Paste, MakeChild};
 struct Point {
     int x;
     int y;
@@ -215,8 +213,9 @@ char* getModeName(){
         case Travel: return "TRAVEL";
         case Delete: return "DELETE";
         case FilenameEdit: return "FILENAME EDIT";
-        case Cut: return "Cut";
-        case Paste: return "Paste";
+        case Cut: return "CUT";
+        case Paste: return "PASTE";
+        case MakeChild: return "MAKE CHILD";
         default: return NULL;
     }
 }
@@ -227,6 +226,7 @@ bool isHintMode(enum Mode mode_param){
         case Delete: return true;
         case Cut: return true;
         case Paste: return true;
+        case MakeChild: return true;
         default: return false;
     }
 }
@@ -244,6 +244,7 @@ void hintFunction(Node* node){
         case Travel: graph.selected = node; break;
         case Delete: removeNodeFromGraph(node); break;
         case Cut: CUT = node; switch2(Paste); break;
+        case MakeChild: makeChild(node); break;
         case Paste:
             if ( !CUT ) break;
             removeFromArray(CUT->p->children, CUT);
@@ -326,16 +327,13 @@ void switch2(enum Mode to){
             CURRENT_BUFFER = &FILENAME_BUFFER;
             break;
         case Travel:
-            if (mode == Travel)
-                CUT = NULL; // clear cut node on a double escape
+            if (mode == Travel) CUT = NULL; // clear cut node on a double escape
             mode = Travel;
-                break;
-        case Delete:
-            mode = Delete; break;
-        case Cut:
-            mode = Cut; break;
-        case Paste:
-            mode = Paste; break;
+            break;
+        case MakeChild: mode = MakeChild; break;
+        case Delete:    mode = Delete; break;
+        case Cut:       mode = Cut; break;
+        case Paste:     mode = Paste; break;
     }
     if ( isHintMode(to) )
         activateHints();
@@ -373,7 +371,7 @@ void doKeyUp(SDL_KeyboardEvent *event) {
     switch(mode) {
     case Travel:
         switch(event->keysym.sym) {
-            case SDLK_o: { makeChild(graph.selected); activateHints(); return; }
+            case SDLK_o: { switch2(MakeChild); return; }
             case SDLK_e: { switch2(Edit); return; }
             case SDLK_r: { switch2(FilenameEdit); return; }
             case SDLK_x: { switch2(Delete); return; }
