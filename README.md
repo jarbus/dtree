@@ -13,7 +13,6 @@ The application provides 6 modes of interaction with the decision tree- `Travel`
 
 In Travel Mode:
 
-* `k` : select the parent node of the current node
 * `e` : switch to Edit mode
 * `s` : clear the selected text, then switch to edit mode
 * `o` : activate MakeChild mode for one node
@@ -54,3 +53,11 @@ In Cut Mode:
 In Paste Mode:
 
 * select a new parent for the cut node
+
+# Roadmap
+
+* Add a FILE-OPEN key: a node buffer will be a file name, and pressing a key on the node opens it in users' preferred app
+* Scaling the graph to zoom in or out
+* Add cursor for buffers so users can use arrow keys to edit specific parts of text
+* Add copy, paste functionality for buffers
+* Ensure hints are clearly separated from one another

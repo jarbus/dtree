@@ -1,12 +1,3 @@
-// TODO
-// - add, copy, paste functionality for buffers
-// - make hints clearly separated
-// - better enter functionality for text, given a position
-// - add cursor for buffers
-// - better scaling
-// - add a FILE-OPEN key: a node buffer will be a file name, and pressing a key on the node opens it
-// NOTE:
-// SDLK is software character, SCANCODE is hardware
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_ttf.h>
