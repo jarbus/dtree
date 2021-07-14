@@ -356,10 +356,6 @@ void doKeyUp(SDL_KeyboardEvent *event) {
     if (event->repeat != 0) {
         return;
     }
-    if (event->keysym.sym == SDLK_q){
-        app.quit = 1;
-        return;
-    }
     // up-front key-checks that apply to any mode
     switch(event->keysym.sym) {
         case SDLK_ESCAPE:
@@ -380,6 +376,7 @@ void doKeyUp(SDL_KeyboardEvent *event) {
             case SDLK_s: { clearBuffer(&graph.selected->text); switch2(Edit); return; }
             case SDLK_c: { TOGGLE_MODE = 1; return; }
             case SDLK_w: { write2File(); return; }
+            case SDLK_q: {app.quit=1; return;}
         }
         break; // end of Travel bindings
     case Edit: {
@@ -431,7 +428,7 @@ void handleTextInput(SDL_Event *event){
            }
        }
 
-       if ( add_text )
+       if ( add_text && CURRENT_BUFFER->len < CURRENT_BUFFER->size)
            CURRENT_BUFFER->buf[(CURRENT_BUFFER->len)++] = event->edit.text[0];
        debug_print("edit.text[0]: %c\n", event->edit.text[0]);
        debug_print("new text, len %d: %s\n", graph.selected->text.len, graph.selected->text.buf);
