@@ -1,7 +1,9 @@
 // TODO
 // - add, copy, paste functionality for buffers
+// - make hints clearly separated
 // - better enter functionality for text, given a position
 // - add cursor for buffers
+// - better scaling
 // - add a FILE-OPEN key: a node buffer will be a file name, and pressing a key on the node opens it
 // NOTE:
 // SDLK is software character, SCANCODE is hardware
@@ -83,15 +85,15 @@ static int SELECTED_COLOR[4] =   {0, 220, 0, 0};
 static int UNSELECTED_COLOR[4] = {0, 55, 0, 0};
 static int CUT_COLOR[4] =   {0, 0, 220, 0};
 static int BACKGROUND_COLOR[4] = {15, 15, 15, 255};
-static int TEXTBOX_WIDTH_SCALE = 50;                        // width of char
-static int TEXTBOX_HEIGHT = 100;                            // Heigh of char
+static int TEXTBOX_WIDTH_SCALE = 25;                        // width of char
+static int TEXTBOX_HEIGHT = 50;                            // Heigh of char
 static int MAX_TEXT_LEN = 128;                              // Max Num of chars in a node
 static int NUM_CHARS_B4_WRAP = 15;
 // radius and thickness of node box
 static int RADIUS = 50;
 static int THICKNESS = 10;
-static int FONT_SIZE = 85;
-static char* FONT_NAME = "./assets/FreeMono.otf";   // Default Font name
+static int FONT_SIZE = 40;
+static char* FONT_NAME = "./assets/SourceCodePro-Regular.otf";   // Default Font name
 static const char* HINT_CHARS = "adfghjl;\0";              // characters to use for hints
 
 /* Globals */
@@ -528,13 +530,16 @@ void drawNode(Node* node) {
         if ( render_hint ) {
             message_pos.x = x  - (int)(width / 2) - THICKNESS;
             message_pos.y = y  - (int)(height / 2) - THICKNESS - RADIUS;
-            renderMessage(node->hint_text, message_pos, 0.5, HINT_COLOR, 0);
+            renderMessage(node->hint_text, message_pos, 0.75, HINT_COLOR, 0);
         }
     }
 
     /* draw edges between parent and child nodes */
-    if (node != graph.root)
+    if (node != graph.root){
+        SDL_SetRenderDrawColor(app.renderer, UNSELECTED_COLOR[0], UNSELECTED_COLOR[1], UNSELECTED_COLOR[2], UNSELECTED_COLOR[3]);
         SDL_RenderDrawLine(app.renderer, x, y - (height/2), node->p->pos.x, node->p->pos.y + (getHeight(node->p->text.buf, 1) / 2));
+    }
+
 
     for (int i=0; i<node->children->num; i++){
         debug_print("child %d / %lu: %p\n", i, node->children->num, node->children->array[i]);
@@ -556,7 +561,7 @@ int getHeight (char* message, bool wrap){
         int num_lines=1, chars_since_line_start=0, chars_since_last_space=0;
         for (int i = 0; i < strlen(message); ++i) {
             if ( chars_since_line_start == NUM_CHARS_B4_WRAP ) {
-                chars_since_line_start = chars_since_last_space;
+                chars_since_line_start = chars_since_last_space - 1;
                 num_lines++;
             }
             if ( message[i] == ' ' )
@@ -740,7 +745,7 @@ void prepareScene() {
     // Draw filename
     Point filename_pos;
     filename_pos.x = (int) ((0.0) * app.window_size.x);
-    filename_pos.y = (int) ((0.9) * app.window_size.y);
+    filename_pos.y = (int) ((1.0) * app.window_size.y - TEXTBOX_HEIGHT);
     renderMessage(FILENAME_BUFFER.buf, filename_pos, 1.0, EDIT_COLOR, 0);
 
     // Draw mode
@@ -753,7 +758,7 @@ void prepareScene() {
     //Draw hint buffer
     Point hint_buf_pos;
     hint_buf_pos.x = (int) ((1.0 * app.window_size.x) - (HINT_BUFFER.len * TEXTBOX_WIDTH_SCALE));
-    hint_buf_pos.y = (int) ((0.9) * app.window_size.y);
+    hint_buf_pos.y = (int) ((1.0) * app.window_size.y - TEXTBOX_HEIGHT);
     renderMessage(HINT_BUFFER.buf, hint_buf_pos, 1.0, HINT_COLOR, 0);
 
     if ( TOGGLE_MODE ){
@@ -964,7 +969,7 @@ void populateHintText(Node* node){
     free(queue);
 
     // parent is always k
-    strcpy(node->p->hint_text,"k\0");
+    strcpy(node->p->hint_text,"k");
     debug_print("==== populate end\n");
 }
 
