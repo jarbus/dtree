@@ -1,11 +1,8 @@
 // TODO
-// - hint mode
-//   - qol: remove hint text that doesn't match current buffer
-//   - add, copy, paste functionality
+// - add, copy, paste functionality for buffers
 // - better enter functionality for text, given a position
+// - add cursor for buffers
 // - add a FILE-OPEN key: a node buffer will be a file name, and pressing a key on the node opens it
-// - make hint chars more readable
-// - make hint chars their own color
 // NOTE:
 // SDLK is software character, SCANCODE is hardware
 #include <SDL2/SDL.h>
@@ -516,10 +513,23 @@ void drawNode(Node* node) {
     renderMessage(node->text.buf, message_pos, 1.0, EDIT_COLOR, 1);
     /* render hint text */
     if ( isHintMode(mode) && strlen(node->hint_text) > 0 ){
+        // dont render hint text that doesn't match hint buffer
+        bool render_hint = true;
+        if (HINT_BUFFER.len > 0){
+            for (int i = 0; i < HINT_BUFFER.len; ++i) {
+                if ( HINT_BUFFER.buf[i] != node->hint_text[i] ){
+                    render_hint = false;
+                    break;
+                }
+            }
+        }
+
         // position char in center of node
-        message_pos.x = x  - (int)(width / 2) - THICKNESS;
-        message_pos.y = y  - (int)(height / 2) - THICKNESS - RADIUS;
-        renderMessage(node->hint_text, message_pos, 0.5, HINT_COLOR, 0);
+        if ( render_hint ) {
+            message_pos.x = x  - (int)(width / 2) - THICKNESS;
+            message_pos.y = y  - (int)(height / 2) - THICKNESS - RADIUS;
+            renderMessage(node->hint_text, message_pos, 0.5, HINT_COLOR, 0);
+        }
     }
 
     /* draw edges between parent and child nodes */
