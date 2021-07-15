@@ -14,8 +14,8 @@
 #define debug_print(...) /* no instruction */
 #endif
 
-#define SCREEN_WIDTH   1280
-#define SCREEN_HEIGHT  720
+#define SCREEN_WIDTH   1920
+#define SCREEN_HEIGHT  1080
 
 typedef struct Node Node;
 typedef struct Array Array;
@@ -79,10 +79,10 @@ static int BACKGROUND_COLOR[4] = {15, 15, 15, 255};
 static int TEXTBOX_WIDTH_SCALE = 25;                        // width of char
 static int TEXTBOX_HEIGHT = 50;                            // Heigh of char
 static int MAX_TEXT_LEN = 128;                              // Max Num of chars in a node
-static int NUM_CHARS_B4_WRAP = 15;
+static int NUM_CHARS_B4_WRAP = 20;
 // radius and thickness of node box
 static int RADIUS = 50;
-static int THICKNESS = 10;
+static int THICKNESS = 5;
 static int FONT_SIZE = 40;
 static char* FONT_NAME = "./assets/SourceCodePro-Regular.otf";   // Default Font name
 static const char* HINT_CHARS = "adfghjl;\0";              // characters to use for hints
@@ -123,6 +123,8 @@ bool isEditMode(enum Mode mode_param);
 bool isHintMode(enum Mode mode_param);
 Node* makeNode();
 Node* makeChild(Node* parent);
+int min(int a, int b);
+int max(int a, int b);
 int get_depth(Node* node);
 void calculate_x_offsets(Node* node);
 void calculate_max_heights(Node* node, int level, int* max_heights);
@@ -143,6 +145,14 @@ void update_pos_children(Node* node, double leftmost_bound, double rightmost_bou
 void write2File();
 void writeChildrenStrings(FILE* file, Node* node, int level);
 
+// We replace user-entered \n with | for the file format
+void replaceChar(char* arr, char find, char replace){
+    for (int i = 0; i < strlen(arr); ++i)
+        if ( arr[i] == find )
+            arr[i] = replace;
+    return;
+}
+
 void readfile(){
     FILE* fp = fopen(FILENAME_BUFFER.buf, "r");
     if ( !fp )
@@ -158,6 +168,7 @@ void readfile(){
     /* Load graph root manually */
     hierarchy[0] = graph.root;
     endAtNewline(ret, strlen(ret));
+    replaceChar(ret, '|', '\n');
     strcpy(graph.root->text.buf, ret);
     graph.root->text.len = strlen(ret);
     while ( true ){
@@ -168,13 +179,14 @@ void readfile(){
             break;
         /* remove any trailing newlines */
         endAtNewline(ret, strlen(ret));
+        replaceChar(ret, '|', '\n');
         /* determine level in tree by number of tabs */
         level = countTabs(ret);
         /* create new child node */
         hierarchy[level] = makeChild(hierarchy[level-1]);
         /* copy current line to child node, offset by number of tabs */
         strcpy(hierarchy[level]->text.buf, ret + level);
-        hierarchy[level]->text.len = strlen(ret)-1; // for some reason I need to have a -1 here
+        hierarchy[level]->text.len = strlen(ret + level); // for some reason I need to have a -1 here
     }
     fclose(fp);
     free(buf);
@@ -185,7 +197,9 @@ void readfile(){
 void writeChildrenStrings(FILE* file, Node* node, int level){
     for(int i=0; i<level;i++)
         fprintf(file, "\t");
+    replaceChar(node->text.buf, '\n', '|');
     fprintf(file, "%s\n", node->text.buf);
+    replaceChar(node->text.buf, '|', '\n');
     for (int i=0; i<node->children->num; i++)
         writeChildrenStrings(file, node->children->array[i], level + 1);
 }
@@ -257,6 +271,7 @@ double clip(double num, double min, double max){
     return num;
 }
 int min(int a, int b){ if (a < b ) return a; else return b; }
+int max(int a, int b){ if (a > b ) return a; else return b; }
 
 void initSDL() {
     HINT_NODES = initArray(10);
@@ -331,16 +346,14 @@ void switch2(enum Mode to){
 }
 
 void doKeyDown(SDL_KeyboardEvent *event) {
-    if (event->repeat != 0) {
-        if ( isEditMode(mode) ){
-            switch(event->keysym.sym) {
-                case SDLK_BACKSPACE:
-                    if ( CURRENT_BUFFER && CURRENT_BUFFER->len >= 0)
-                        CURRENT_BUFFER->buf[--CURRENT_BUFFER->len] = '\0';
-            }
+    if ( isEditMode(mode) ){
+        switch(event->keysym.sym) {
+            case SDLK_BACKSPACE:
+                if ( CURRENT_BUFFER && CURRENT_BUFFER->len > 0)
+                    CURRENT_BUFFER->buf[--CURRENT_BUFFER->len] = '\0';
         }
-        return;
     }
+    return;
 }
 
 void doKeyUp(SDL_KeyboardEvent *event) {
@@ -372,10 +385,6 @@ void doKeyUp(SDL_KeyboardEvent *event) {
         break; // end of Travel bindings
     case Edit: {
         switch(event->keysym.sym){
-            case SDLK_BACKSPACE:
-                if ( CURRENT_BUFFER && CURRENT_BUFFER->len >= 0)
-                    CURRENT_BUFFER->buf[--CURRENT_BUFFER->len] = '\0';
-                return;
             case SDLK_RETURN:
                 if ( CURRENT_BUFFER && CURRENT_BUFFER->len >= 0)
                     CURRENT_BUFFER->buf[CURRENT_BUFFER->len++] = '\n';
@@ -537,30 +546,36 @@ void drawNode(Node* node) {
 
 int getWidth (char* message, bool wrap){
     int ret;
-    if ( wrap )
-        ret = min(strlen(message), NUM_CHARS_B4_WRAP) * TEXTBOX_WIDTH_SCALE;
+    if ( wrap ){
+        for (int i = 0; i < strlen(message); ++i) {
+            if ( i > 0 && message[i-1] == '\n' ){
+                return NUM_CHARS_B4_WRAP * TEXTBOX_WIDTH_SCALE;
+            }
+        }
+        ret = min( strlen(message), NUM_CHARS_B4_WRAP) * TEXTBOX_WIDTH_SCALE;
+    }
     else
         ret = strlen(message) * TEXTBOX_WIDTH_SCALE;
-    debug_print("getWidth %d\n", ret);
+    debug_print("getWidth %s: %d\n", message, ret);
     return ret;
 }
 int getHeight (char* message, bool wrap){
     if ( wrap ){
         int num_lines=1, chars_since_line_start=0, chars_since_last_space=0;
         for (int i = 0; i < strlen(message); ++i) {
-            if ( chars_since_line_start == NUM_CHARS_B4_WRAP ) {
-                chars_since_line_start = chars_since_last_space - 1;
+            if ( chars_since_line_start >= NUM_CHARS_B4_WRAP && message[i] != ' ' && message[i] != '\n' ) {
+                chars_since_line_start = chars_since_last_space -1;
                 num_lines++;
             }
             if ( message[i] == ' ' )
                 chars_since_last_space = 0;
-            if ( message[i] == '\n' ){
+            if ( message[i] == '\n' && i < strlen(message) - 1){
                 chars_since_last_space = 0;
-                chars_since_line_start = 0;
+                chars_since_line_start = -1;
+                num_lines++;
             }
             chars_since_line_start++;
             chars_since_last_space++;
-
         }
         return TEXTBOX_HEIGHT * num_lines;
     }
@@ -995,10 +1010,12 @@ int main(int argc, char *argv[]) {
     else
         strcpy(FILENAME_BUFFER.buf, "unnamed.txt");
 
-    readfile();
-    FILENAME_BUFFER.len = strlen(FILENAME_BUFFER.buf);
 
+    FILENAME_BUFFER.len = strlen(FILENAME_BUFFER.buf);
     HINT_BUFFER.buf = calloc(HINT_BUFFER.size + 1, sizeof(char));
+
+    readfile();
+    switch2(Travel);
     /* gracefully close windows on exit of program */
     atexit(SDL_Quit);
     app.quit = 0;
