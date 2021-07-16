@@ -14,8 +14,8 @@
 #define debug_print(...) /* no instruction */
 #endif
 
-#define SCREEN_WIDTH   1920
-#define SCREEN_HEIGHT  1080
+#define SCREEN_WIDTH   1280
+#define SCREEN_HEIGHT  720
 
 typedef struct Node Node;
 typedef struct Array Array;
@@ -85,7 +85,7 @@ static int RADIUS = 50;
 static int THICKNESS = 5;
 static int FONT_SIZE = 40;
 static char* FONT_NAME = "./assets/SourceCodePro-Regular.otf";   // Default Font name
-static const char* HINT_CHARS = "adfghjl;\0";              // characters to use for hints
+static const char* HINT_CHARS = "adfgj;\0";              // characters to use for hints
 
 /* Globals */
 static App app;                 // App object that contains rendering info
@@ -113,6 +113,8 @@ void endAtNewline(char* string, int textlen);
 void eventHandler(SDL_Event *event);
 void* freeArray(Array *a);
 char* getModeName();
+Node* getLeftSibling (Node* node);
+Node* getRightSibling (Node* node);
 int getWidth (char* message, bool wrap);
 int getHeight (char* message, bool wrap);
 void handleTextInput(SDL_Event *event);
@@ -151,6 +153,22 @@ void replaceChar(char* arr, char find, char replace){
         if ( arr[i] == find )
             arr[i] = replace;
     return;
+}
+
+Node* getLeftSibling (Node* node) {
+    if ( node->p == node ) return NULL;
+    for (int i = 1; i < node->p->children->num; ++i)
+        if ( node->p->children->array[i] == node )
+            return node->p->children->array[i-1];
+    return NULL;
+}
+
+Node* getRightSibling (Node* node) {
+    if ( node->p == node ) return NULL;
+    for (int i = 0; i < node->p->children->num - 1; ++i)
+        if ( node->p->children->array[i] == node)
+            return node->p->children->array[i+1];
+    return NULL;
 }
 
 void readfile(){
@@ -437,10 +455,17 @@ void handleTextInput(SDL_Event *event){
        // go to node specified by travel chars
        debug_print("handling travel input: %d/%d\n", HINT_BUFFER.len, HINT_BUFFER.size);
        // hardcode k to be parent
-       if ( event->edit.text[0] == 'k' ){
-           hintFunction(graph.selected->p);
+       Node* hardcoded_target = NULL;
+       switch ( event->edit.text[0] ){
+           case 'k': {hardcoded_target = graph.selected->p; break; }
+           case 'h': {hardcoded_target = getLeftSibling(graph.selected); break; }
+           case 'l': {hardcoded_target = getRightSibling(graph.selected); break; }
+       }
+       if ( hardcoded_target ){
+           hintFunction(hardcoded_target);
            calculate_positions(graph.root, graph.selected);
            populateHintText(graph.selected);
+           return;
        }
        // check if any nodes hint text matches current input
        for (int i = 0; i < HINT_NODES->num; ++i) {
@@ -855,7 +880,7 @@ void deleteNode(Node* node){
         return;
     /* delete each child */
     for (int i=0; i<node->children->num; i++)
-        deleteNode( node->children->array[i] );
+        removeNodeFromGraph( node->children->array[i] );
 
     /* Then delete node */
     debug_print("deleting node %p\n", node);
@@ -973,6 +998,8 @@ void populateHintText(Node* node){
 
     // parent is always k
     strcpy(node->p->hint_text,"k");
+    if ( getLeftSibling(node) ) strcpy(getLeftSibling(node)->hint_text,"h");
+    if ( getRightSibling(node) ) strcpy(getRightSibling(node)->hint_text,"l");
     debug_print("==== populate end\n");
 }
 
@@ -1044,7 +1071,7 @@ int main(int argc, char *argv[]) {
     if (HINT_BUFFER.buf) free(HINT_BUFFER.buf);
     free(FILENAME_BUFFER.buf);
     /* delete nodes recursively, starting from root */
-    deleteNode(graph.root);
+    removeNodeFromGraph(graph.root);
     debug_print("deleted nodes\n");
     SDL_DestroyRenderer( app.renderer );
     SDL_DestroyWindow( app.window );
