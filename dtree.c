@@ -6,12 +6,12 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
-// https://stackoverflow.com/questions/1644868/define-macro-for-debug-printing-in-c
-// EDIT: https://stackoverflow.com/questions/1941307/debug-print-macro-in-c
+// https://stackoverflow.com/questions/1644868/define-macro-for-log-printing-in-c
+// EDIT: https://stackoverflow.com/questions/1941307/log-print-macro-in-c
 #ifdef DEBUG
-#define debug_print(...) fprintf(stderr, __VA_ARGS__);
+#define log_print(...) fprintf(stderr, __VA_ARGS__);
 #else
-#define debug_print(...) /* no instruction */
+#define log_print(...) /* no instruction */
 #endif
 
 #define SCREEN_WIDTH   1280
@@ -297,12 +297,12 @@ void initSDL() {
     rendererFlags = SDL_RENDERER_ACCELERATED;
     windowFlags = SDL_WINDOW_RESIZABLE;
 
-    debug_print("initing video\n");
+    log_print("Initializing video...\n");
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         printf("Couldn't initialize SDL: %s\n", SDL_GetError());
         exit(1);
     }
-    debug_print("inited video\n");
+    log_print("Initialized video.\n");
 
     app.window = SDL_CreateWindow("dtree", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, windowFlags);
 
@@ -310,12 +310,12 @@ void initSDL() {
         printf("Failed to open %d x %d window: %s\n", SCREEN_WIDTH, SCREEN_HEIGHT, SDL_GetError());
         exit(1);
     }
-    debug_print("creating renderer\n");
+    log_print("Creating renderer...\n");
     app.renderer = SDL_CreateRenderer(app.window, -1, rendererFlags);
-    debug_print("created renderer\n");
+    log_print("Render created.\n");
 
     if (!app.renderer) {
-        printf("Failed to create renderer: %s\n", SDL_GetError());
+        log_print("Failed to create renderer: %s\n", SDL_GetError());
         exit(1);
     }
     app.quit = 0;
@@ -323,7 +323,7 @@ void initSDL() {
 
     /* start SDL_ttf */
     if(TTF_Init()==-1){
-        printf("TTF_Init: %s\n", TTF_GetError());
+        log_print("TTF_Init: %s\n", TTF_GetError());
         return;
     }
     atexit(TTF_Quit); /* remember to quit SDL_ttf */
@@ -433,7 +433,7 @@ void eventHandler(SDL_Event *event) {
 
 void handleTextInput(SDL_Event *event){
     if ( CURRENT_BUFFER && CURRENT_BUFFER->len < CURRENT_BUFFER->size ){
-       debug_print("Adding text\n");
+       log_print("Adding text to current buffer...\n");
        int add_text = 1;
        // skip adding to buffer for hint modes if not a valid hint char
        if ( isHintMode(mode) ){
@@ -448,12 +448,12 @@ void handleTextInput(SDL_Event *event){
 
        if ( add_text && CURRENT_BUFFER->len < CURRENT_BUFFER->size)
            CURRENT_BUFFER->buf[(CURRENT_BUFFER->len)++] = event->edit.text[0];
-       debug_print("edit.text[0]: %c\n", event->edit.text[0]);
-       debug_print("new text, len %d: %s\n", graph.selected->text.len, graph.selected->text.buf);
+       log_print("Detected character: %c\n", event->edit.text[0]);
+       log_print("New CURRENT_BUFFER: len %d: %s\n", CURRENT_BUFFER->len, CURRENT_BUFFER->buf);
    }
    if ( isHintMode(mode) ){
        // go to node specified by travel chars
-       debug_print("handling travel input: %d/%d\n", HINT_BUFFER.len, HINT_BUFFER.size);
+       log_print("Handling travel input: %d/%d chars\n", HINT_BUFFER.len, HINT_BUFFER.size);
        // hardcode k to be parent
        Node* hardcoded_target = NULL;
        switch ( event->edit.text[0] ){
@@ -474,17 +474,17 @@ void handleTextInput(SDL_Event *event){
                continue;
            hintFunction(HINT_NODES->array[i]);
            // reset hint text
-           debug_print("freeing hint chars\n");
+           log_print("Freeing hint buffer\n");
            clearBuffer(&HINT_BUFFER);
-           debug_print("freed hint chars\n");
+           log_print("Freed hint buffer\n");
 
-           debug_print("calculating positions\n");
+           log_print("Re-calculating positions of nodes...\n");
            calculate_positions(graph.root, graph.selected);
-           debug_print("populating hint text\n");
+           log_print("Populating hint text...\n");
            populateHintText(graph.selected);
-           debug_print("changing nodes\n");
+           log_print("Populated.\n");
        }
-       debug_print("handled hint input\n");
+       log_print("Handled hint input.\n");
    }
 }
 
@@ -514,11 +514,10 @@ void drawBorder(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, 
 void drawNode(Node* node) {
     if ( node == NULL ) return;
 
+    log_print("drawNode(%p)\n", node);
     int x = node->pos.x;
     int y = node->pos.y;
-    debug_print("node %p\n", node);
-    debug_print("children %p\n", node->children);
-    debug_print("num children %lu\n", node->children->num);
+    log_print("Children pointer: %p, num: %lu\n", node->children, node->children->num);
     /* draw red ring for unselected nodes, green for selected */
     int width  = getWidth(node->text.buf, 1);
     int height = getHeight(node->text.buf, 1);
@@ -564,9 +563,10 @@ void drawNode(Node* node) {
 
 
     for (int i=0; i<node->children->num; i++){
-        debug_print("child %d / %lu: %p\n", i, node->children->num, node->children->array[i]);
+        log_print("Drawing child %d / %lu: %p...\n", i, node->children->num, node->children->array[i]);
         drawNode(node->children->array[i]);
     }
+    log_print("Finished drawing %p\n", node);
 }
 
 int getWidth (char* message, bool wrap){
@@ -581,7 +581,6 @@ int getWidth (char* message, bool wrap){
     }
     else
         ret = strlen(message) * TEXTBOX_WIDTH_SCALE;
-    debug_print("getWidth %s: %d\n", message, ret);
     return ret;
 }
 int getHeight (char* message, bool wrap){
@@ -628,7 +627,7 @@ void renderMessage(char* message, Point pos, double scale, SDL_Color color, bool
 
     SDL_SetRenderDrawColor(app.renderer, BACKGROUND_COLOR[0], BACKGROUND_COLOR[1], BACKGROUND_COLOR[2], BACKGROUND_COLOR[3]);
     SDL_RenderFillRect(app.renderer, &Message_rect);
-    debug_print("rendering %s %d %d\n", message, Message_rect.w, Message_rect.h);
+    log_print("Rendering %s %d %d\n", message, Message_rect.w, Message_rect.h);
     SDL_RenderCopy(app.renderer, Message, NULL, &Message_rect);
     SDL_FreeSurface(surfaceMessage);
     SDL_DestroyTexture(Message);
@@ -650,13 +649,13 @@ int get_depth(Node* node) {
 // recursive helper function for calculate_positions
 // shifts over subtrees so that they do not overlap at any x-coordinate
 void calculate_x_offsets(Node* node) {
-    debug_print("calculating offsets for %p\n", node);
+    log_print("Calculating offsets for %p...\n", node);
     int text_pixel_length = getWidth(node->text.buf, true);
     node -> x_offset  = 0;
     node -> rightmost = text_pixel_length/2;
     node -> leftmost  = -text_pixel_length/2;
     int total_offset = 0;
-    debug_print("shifting %ld children for node with text %s\n", node->children->num, node->text.buf);
+    log_print("Shifting %ld children for node with text %s\n", node->children->num, node->text.buf);
     for (int i = 0; i < node->children->num; i++) {
         Node* child = node->children->array[i];
         calculate_x_offsets(child);
@@ -668,14 +667,14 @@ void calculate_x_offsets(Node* node) {
             child->x_offset = total_offset;
         }
     }
-    debug_print("centering parent\n");
+    log_print("Centering parent\n");
     // center parent over children
     for (int i = 0; i < node->children->num; i++) {
         Node* child = node->children->array[i];
         child->x_offset -= total_offset/2;
     }
     // calculate leftmost and rightmost for current node
-    debug_print("calculating left and rightmost children\n");
+    log_print("Calculating left and rightmost children\n");
     if(node->children->num >= 1) {
         Node* leftmost_child = node->children->array[0];
         int child_leftmost = leftmost_child->x_offset + leftmost_child->leftmost;
@@ -729,15 +728,15 @@ void calculate_positions(Node* root, Node* selected){
 
     int* y_levels = calloc(1+get_depth(root), sizeof(int));
 
-    debug_print("calculating offsets\n");
+    log_print("Calculating offsets...\n");
     calculate_x_offsets(root);
-    debug_print("calculating y levels\n");
+    log_print("Calculating y levels...\n");
     calculate_max_heights(root, 0, y_levels);
-    debug_print("applying offsets\n");
+    log_print("Applying offsets...\n");
     apply_offsets(root, 0, 0, y_levels);
-    debug_print("centering\n");
+    log_print("Centering...\n");
     center_on_selected(root, graph.selected->pos.x, graph.selected->pos.y);
-    debug_print("positions calculated\n");
+    log_print("Positions calculated.\n");
 
     free(y_levels);
 }
@@ -745,9 +744,9 @@ void calculate_positions(Node* root, Node* selected){
 /* Debug function, used to print locations of all nodes in indented hierarchy */
 void recursively_print_positions(Node* node, int level){
     for (int i=0; i<level; i++){
-        debug_print("\t");
+        log_print("\t");
     }
-    debug_print("%d %d\n",node->pos.x, node->pos.y);
+    log_print("%d %d\n",node->pos.x, node->pos.y);
 
     for (int i = 0; i < node->children->num; i++) {
         recursively_print_positions(node->children->array[i], level + 1);
@@ -780,7 +779,6 @@ void prepareScene() {
     Point mode_text_pos;
     mode_text_pos.x = (int) ((0.0) * app.window_size.x);
     mode_text_pos.y = (int) ((0.0) * app.window_size.y);
-    debug_print("rendering %s\n", getModeName());
     renderMessage(getModeName(), mode_text_pos, 1.0, EDIT_COLOR, 0);
 
     //Draw hint buffer
@@ -816,9 +814,9 @@ void insertArray(Array *a, void* element) {
     // Therefore a->num can go up to a->size
     if (a->num == a->size) {
         a->size *= 2;
-        debug_print("reallocing, num %ld size %ld\n", a->num, a->size);
+        log_print("Reallocing, num %ld size %ld...\n", a->num, a->size);
         a->array = realloc(a->array, a->size * sizeof(void*));
-        debug_print("realloced\n");
+        log_print("Realloced.\n");
     }
     a->array[a->num++] = element;
 }
@@ -874,7 +872,7 @@ Node* makeChild(Node* parent){
 }
 
 void deleteNode(Node* node){
-    debug_print("DELETEING\n");
+    log_print("DELETEING %p\n", node);
     /* Handle nodes that have already been deleted */
     if ( node == NULL )
         return;
@@ -883,28 +881,27 @@ void deleteNode(Node* node){
         removeNodeFromGraph( node->children->array[i] );
 
     /* Then delete node */
-    debug_print("deleting node %p\n", node);
-    debug_print("freeing children\n");
+    log_print("Freeing children\n");
     freeArray(node->children);
-    debug_print("freeing buffer\n");
+    log_print("Freeing buffer\n");
     free(node->text.buf);
-    debug_print("freeing hint_text\n");
+    log_print("Freeing hint_text\n");
     free(node->hint_text);
     free(node);
-    debug_print("deleted node %p\n", node);
+    log_print("Deleted node %p\n", node);
 }
 
 void removeNodeFromGraph(Node* node){
 
     if ( node == graph.root ) return;
-    debug_print("removing node from graph\n");
+    log_print("Removing node from graph...\n");
     // remove node from array
     removeFromArray(node->p->children, node);
     removeFromArray(HINT_NODES, node);
     if ( node == graph.selected )
         graph.selected = node->p;
     deleteNode(node);
-    debug_print("removed node from graph\n");
+    log_print("Removed node from graph.\n");
 }
 
 void makeGraph(){
@@ -916,64 +913,57 @@ void makeGraph(){
 }
 
 void clearHintText() {
-    debug_print("start clearHintText()\n");
+    log_print("clearHintText()\n");
     // return if already freed
     if (HINT_NODES == NULL || HINT_NODES->array == NULL){
         return;
     }
-    debug_print("hint nodes %p, num %ld\n", HINT_NODES->array, HINT_NODES->num);
+    log_print("Hint nodes %p, num %ld\n", HINT_NODES->array, HINT_NODES->num);
     // Clear all hint text in each hint node
     for (int i = 0; i < HINT_NODES->num; ++i) {
         for (int j = 0; j < HINT_BUFFER.size; j++) {
-            debug_print("node %d (%p)\n", i, HINT_NODES->array[i]);
-            debug_print("hint_text %p\n", HINT_NODES->array[i]->hint_text);
             if (HINT_NODES->array[i]->hint_text){
-                debug_print("in if %d: %s\n", j, HINT_NODES->array[i]->hint_text);
                 HINT_NODES->array[i]->hint_text[j] = '\0';
             }
-            debug_print("accessed hint text\n");
         }
     }
     // Clear hint node array
-    debug_print("freeing HINT_NODES\n");
+    log_print("Freeing HINT_NODES\n");
     HINT_NODES = freeArray ( HINT_NODES );
-    debug_print("end clearHintText()\n");
+    log_print("End clearHintText()\n");
 }
 
 // Add all visible nodes to HINT_NODES
 void populateHintNodes(Node* node){
     if ( !node )
         return;
-    debug_print("adding hint node: %dx%d\n", node->pos.x, node->pos.y);
+    log_print("Adding hint node: %dx%d\n", node->pos.x, node->pos.y);
     if ( RADIUS <= node->pos.x && node->pos.x < app.window_size.x-RADIUS &&\
             RADIUS < node->pos.y && node->pos.y < app.window_size.y-RADIUS) {
         insertArray(HINT_NODES, node);
-        debug_print("added\n");
     }
     for (int i = 0; i < node->children->num; ++i) {
-        debug_print("going to next child\n");
+        log_print("Going to next child\n");
         populateHintNodes(node->children->array[i]);
     }
 }
 
 void populateHintText(Node* node){
-    debug_print("populate start\n");
+    log_print("Populate start\n");
     clearHintText();
     HINT_NODES = initArray(10);
     populateHintNodes(graph.root);
-    debug_print("cleared\n");
-    debug_print("%p: %s\n",node->p->hint_text, node->p->hint_text);
+    log_print("Cleared\n");
+    log_print("%p: %s\n",node->p->hint_text, node->p->hint_text);
     char** queue = calloc(8192, sizeof(char*));
     char* prefix = calloc(HINT_BUFFER.size+1, sizeof(char));
     int front = 0, back=0, done=0;
     while ( !done ){
-        debug_print("iterating while, back: %d, front: %d\n", back, front);
+        log_print("Iterating while loop, back: %d, front: %d\n", back, front);
         for (int i = 0; i < strlen(HINT_CHARS); ++i) {
             queue[back] = calloc(HINT_BUFFER.size+1, sizeof(char));
             strcpy(queue[back], prefix);
             queue[back][strlen(prefix)] = HINT_CHARS[i];
-            debug_print("allocated %p: %s\n", queue[back], queue[back]);
-            debug_print("===== back-front: %d string: %s hint->num %ld\n", back-front, queue[back], HINT_NODES->num);
             if ( back - front == HINT_NODES->num){
                 done = 1;
                 break;
@@ -986,21 +976,19 @@ void populateHintText(Node* node){
         free(queue[i]);
     }
     for (int i = 0; i < HINT_NODES->num; i++) {
-        debug_print("%p: %s\n", HINT_NODES->array[i]->hint_text, queue[front + i]);
         strcpy(HINT_NODES->array[i]->hint_text, queue[front + i]);
         free(queue[front + i]);
-        debug_print("freed\n");
     }
     for (int i = front + HINT_NODES->num; i < back; ++i) {
         free(queue[i]);
     }
     free(queue);
 
-    // parent is always k
+    // hardcode parents and siblings
     strcpy(node->p->hint_text,"k");
     if ( getLeftSibling(node) ) strcpy(getLeftSibling(node)->hint_text,"h");
     if ( getRightSibling(node) ) strcpy(getRightSibling(node)->hint_text,"l");
-    debug_print("==== populate end\n");
+    log_print("Populate end.\n");
 }
 
 unsigned int countTabs(char* string){
@@ -1054,25 +1042,24 @@ int main(int argc, char *argv[]) {
 
         /* Handle input before rendering */
         eventHandler(&e);
-        debug_print("event handler done\n");
+        log_print("Event handler done\n");
 
-        debug_print("prepare scene start\n");
+        log_print("Prepare scene start...\n");
         prepareScene();
-        debug_print("prepare scene end\n");
+        log_print("Prepare scene end.\n");
 
-        debug_print("present scene start\n");
+        log_print("Present scene start...\n");
         presentScene();
-        debug_print("present scene end\n");
+        log_print("Present scene end.\n");
 
         SDL_Delay(0);
-        debug_print("end loop\n");
     }
 
     if (HINT_BUFFER.buf) free(HINT_BUFFER.buf);
     free(FILENAME_BUFFER.buf);
     /* delete nodes recursively, starting from root */
     removeNodeFromGraph(graph.root);
-    debug_print("deleted nodes\n");
+    log_print("Deleted all nodes\n");
     SDL_DestroyRenderer( app.renderer );
     SDL_DestroyWindow( app.window );
     SDL_Quit();
