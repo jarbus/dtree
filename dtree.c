@@ -74,7 +74,8 @@ static SDL_Color EDIT_COLOR =    {220, 220, 220};           // RGB
 static SDL_Color HINT_COLOR =    {220, 0, 0};               // RGB
 static int SELECTED_COLOR[4] =   {0, 220, 0, 0};
 static int UNSELECTED_COLOR[4] = {0, 55, 0, 0};
-static int CUT_COLOR[4] =   {0, 0, 220, 0};
+static int CUT_COLOR[4] =        {0, 0, 220, 0};
+static int EDGE_COLOR[4] =       {220, 220, 220, 0};
 static int BACKGROUND_COLOR[4] = {15, 15, 15, 255};
 static int TEXTBOX_WIDTH_SCALE = 25;                        // width of char
 static int TEXTBOX_HEIGHT = 50;                            // Heigh of char
@@ -528,6 +529,12 @@ void drawNode(Node* node) {
     else
         drawBorder(app.renderer, x, y, width, height, THICKNESS, UNSELECTED_COLOR[0], UNSELECTED_COLOR[1], UNSELECTED_COLOR[2], UNSELECTED_COLOR[3]);
 
+    /* draw edges between parent and child nodes */
+    if (node != graph.root){
+        SDL_SetRenderDrawColor(app.renderer, EDGE_COLOR[0], EDGE_COLOR[1], EDGE_COLOR[2], EDGE_COLOR[3]);
+        SDL_RenderDrawLine(app.renderer, x, y - (height/2), node->p->pos.x, node->p->pos.y + (getHeight(node->p->text.buf, 1) / 2));
+    }
+
     Point message_pos;
     message_pos.x = x - (width / 2);
     message_pos.y = y - (height / 2);
@@ -554,13 +561,6 @@ void drawNode(Node* node) {
             renderMessage(node->hint_text, message_pos, 0.75, HINT_COLOR, 0);
         }
     }
-
-    /* draw edges between parent and child nodes */
-    if (node != graph.root){
-        SDL_SetRenderDrawColor(app.renderer, UNSELECTED_COLOR[0], UNSELECTED_COLOR[1], UNSELECTED_COLOR[2], UNSELECTED_COLOR[3]);
-        SDL_RenderDrawLine(app.renderer, x, y - (height/2), node->p->pos.x, node->p->pos.y + (getHeight(node->p->text.buf, 1) / 2));
-    }
-
 
     for (int i=0; i<node->children->num; i++){
         log_print("Drawing child %d / %lu: %p...\n", i, node->children->num, node->children->array[i]);
@@ -938,8 +938,8 @@ void populateHintNodes(Node* node){
     if ( !node )
         return;
     log_print("Adding hint node: %dx%d\n", node->pos.x, node->pos.y);
-    if ( RADIUS <= node->pos.x && node->pos.x < app.window_size.x-RADIUS &&\
-            RADIUS < node->pos.y && node->pos.y < app.window_size.y-RADIUS) {
+    if ( -(2*getWidth(node->text.buf, 1)) <= node->pos.x && node->pos.x < app.window_size.x+(2*getWidth(node->text.buf, 1)) &&\
+            RADIUS < node->pos.y && node->pos.y < app.window_size.y+(2*getHeight(node->text.buf, 1))) {
         insertArray(HINT_NODES, node);
     }
     for (int i = 0; i < node->children->num; ++i) {
