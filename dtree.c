@@ -98,6 +98,8 @@ static Buffer* CURRENT_BUFFER;  // buffer to store current hint progress
 static Node* CUT = NULL;
 static bool TOGGLE_MODE=0;
 static char* TOGGLE_INDICATOR = "MODE PERSIST\0";
+static Node* left_neighbor = NULL; // left and right neighbors of the selected node
+static Node* right_neighbor = NULL;
 
 void activateHints();
 void clearHintText();
@@ -114,8 +116,6 @@ void endAtNewline(char* string, int textlen);
 void eventHandler(SDL_Event *event);
 void* freeArray(Array *a);
 char* getModeName();
-Node* getLeftSibling (Node* node);
-Node* getRightSibling (Node* node);
 int getWidth (char* message, bool wrap);
 int getHeight (char* message, bool wrap);
 void handleTextInput(SDL_Event *event);
@@ -134,6 +134,7 @@ void calculate_max_heights(Node* node, int level, int* max_heights);
 void apply_offsets(Node* node, int x_offset, int level, int* y_levels);
 void center_on_selected(Node* node, int selected_x, int selected_y);
 void calculate_positions(Node* root, Node* selected);
+void calculate_neighbors(Node* root, Node* selected);
 void populateHintText(Node* node);
 void presentScene();
 void prepareScene();
@@ -153,22 +154,6 @@ void replaceChar(char* arr, char find, char replace){
         if ( arr[i] == find )
             arr[i] = replace;
     return;
-}
-
-Node* getLeftSibling (Node* node) {
-    if ( node->p == node ) return NULL;
-    for (int i = 1; i < node->p->children->num; ++i)
-        if ( node->p->children->array[i] == node )
-            return node->p->children->array[i-1];
-    return NULL;
-}
-
-Node* getRightSibling (Node* node) {
-    if ( node->p == node ) return NULL;
-    for (int i = 0; i < node->p->children->num - 1; ++i)
-        if ( node->p->children->array[i] == node)
-            return node->p->children->array[i+1];
-    return NULL;
 }
 
 void readfile(){
@@ -736,6 +721,45 @@ void recursively_print_positions(Node* node, int level){
     }
 }
 
+void calculate_neighbors(Node* root, Node* selected) {
+    left_neighbor = NULL;
+    right_neighbor = NULL;
+    if (selected == root)
+       return;
+
+    //                     buffer overflow waiting to happen
+    //                     VVVV 
+    Node** queue =  calloc(8192, sizeof(Node*)); 
+    int* node_depths =  calloc(8192, sizeof(int)); 
+    
+    queue[0] = root;
+    int index = 0;
+    int queue_len = 1;
+    bool found = false;
+
+    while ( index != queue_len ) {
+        Node* cur = queue[index];
+        if (index > 0 && queue[index] == selected) {
+            found = true;
+            break;
+        }
+        // add children to the queue
+        for(int i = 0; i < cur->children->num; i++) {
+            queue[queue_len] = cur->children->array[i];
+            node_depths[queue_len] = node_depths[index]+1;
+            queue_len++;
+        }
+        index++;
+    }
+    if (found) {
+        if(node_depths[index] == node_depths[index-1])
+            left_neighbor = queue[index-1];
+        if(node_depths[index] == node_depths[index+1])
+            right_neighbor = queue[index+1];
+    }
+    free(queue);
+    free(node_depths);
+}
 
 /* re-computes graph and draws everything onto renderer */
 void prepareScene() {
@@ -929,6 +953,7 @@ void populateHintNodes(Node* node){
 void populateHintText(Node* node){
 
     log_print("Populate start\n");
+    calculate_neighbors(graph.root, graph.selected);
     clearHintText();
     HINT_NODES = initArray(10);
     populateHintNodes(graph.root);
@@ -967,10 +992,12 @@ void populateHintText(Node* node){
     }
     free(queue);
 
-    // hardcode parents and siblings
+    // parent is 'k', left_neighbor 'h', right neighbor 'l'
     strcpy(node->p->hint_text,"k");
-    if ( getLeftSibling(node) ) strcpy(getLeftSibling(node)->hint_text,"h");
-    if ( getRightSibling(node) ) strcpy(getRightSibling(node)->hint_text,"l");
+    if (left_neighbor)
+        strcpy(left_neighbor->hint_text, "h");
+    if (right_neighbor)
+        strcpy(right_neighbor->hint_text, "l");
     log_print("Populate end.\n");
 }
 
