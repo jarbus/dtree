@@ -351,7 +351,6 @@ void switch2(enum Mode to){
             CURRENT_BUFFER = &FILENAME_BUFFER;
             break;
         case Travel:
-            if (mode == Travel) CUT = NULL; // clear cut node on a double escape
             mode = Travel;
             TOGGLE_MODE = 0;
             break;
@@ -382,6 +381,7 @@ void doKeyUp(SDL_KeyboardEvent *event) {
     // up-front key-checks that apply to any mode
     switch(event->keysym.sym) {
         case SDLK_ESCAPE:
+            if (mode == Travel) CUT = NULL; // clear cut node on a double escape
             switch2(Travel);
             return;
     }
