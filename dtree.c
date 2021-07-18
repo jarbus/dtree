@@ -86,7 +86,7 @@ static int RADIUS = 50;
 static int THICKNESS = 5;
 static int FONT_SIZE = 40;
 static char* FONT_NAME = "./assets/SourceCodePro-Regular.otf";   // Default Font name
-static const char* HINT_CHARS = "adfgj;\0";              // characters to use for hints
+static const char* HINT_CHARS = "adfghjkl;\0";              // characters to use for hints
 
 /* Globals */
 static App app;                 // App object that contains rendering info
@@ -453,19 +453,6 @@ void handleTextInput(SDL_Event *event){
    if ( isHintMode(mode) ){
        // go to node specified by travel chars
        log_print("Handling travel input: %d/%d chars\n", HINT_BUFFER.len, HINT_BUFFER.size);
-       // hardcode k to be parent
-       Node* hardcoded_target = NULL;
-       switch ( event->edit.text[0] ){
-           case 'k': {hardcoded_target = graph.selected->p; break; }
-           case 'h': {hardcoded_target = getLeftSibling(graph.selected); break; }
-           case 'l': {hardcoded_target = getRightSibling(graph.selected); break; }
-       }
-       if ( hardcoded_target ){
-           hintFunction(hardcoded_target);
-           calculate_positions(graph.root, graph.selected);
-           populateHintText(graph.selected);
-           return;
-       }
        // check if any nodes hint text matches current input
        for (int i = 0; i < HINT_NODES->num; ++i) {
            // continue if hint buffer != any hint text
@@ -953,6 +940,10 @@ void populateHintText(Node* node){
     while ( !done ){
         log_print("Iterating while loop, back: %d, front: %d\n", back, front);
         for (int i = 0; i < strlen(HINT_CHARS); ++i) {
+            // blacklist hard-coded hints
+            if (HINT_CHARS[i] == 'k' || HINT_CHARS[i] == 'h' || HINT_CHARS[i] == 'l')
+                continue;
+
             queue[back] = calloc(HINT_BUFFER.size+1, sizeof(char));
             strcpy(queue[back], prefix);
             queue[back][strlen(prefix)] = HINT_CHARS[i];
