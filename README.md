@@ -56,6 +56,8 @@ In Paste Mode:
 
 # Roadmap
 
+* fix issues with root not rendering children that are too far down
+* fix quit error message after deleting certain nodes
 * Add a FILE-OPEN key: a node buffer will be a file name, and pressing a key on the node opens it in users' preferred app
 * Scaling the graph to zoom in or out
 * Add cursor for buffers so users can use arrow keys to edit specific parts of text
