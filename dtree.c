@@ -21,7 +21,6 @@ typedef struct Node Node;
 typedef struct Array Array;
 typedef struct Graph Graph;
 typedef struct Point Point;
-typedef struct DoublePoint DoublePoint;
 typedef struct App App;
 typedef struct Buffer Buffer;
 
@@ -29,10 +28,6 @@ enum Mode{Travel, Edit, FilenameEdit, Delete, Cut, Paste, MakeChild};
 struct Point {
     int x;
     int y;
-};
-struct DoublePoint {
-    double x;
-    double y;
 };
 struct App {
     SDL_Renderer *renderer;
@@ -104,7 +99,6 @@ static Node* right_neighbor = NULL;
 void activateHints();
 void clearHintText();
 void clearBuffer(Buffer* HINT_BUFFER);
-double clip(double num, double min, double max);
 unsigned int countTabs(char* string);
 void deleteNode(Node* node);
 void doKeyUp(SDL_KeyboardEvent *event);
@@ -142,9 +136,7 @@ void readfile();
 void removeFromArray(Array *a, Node* node);
 void removeNodeFromGraph(Node* node);
 void renderMessage(char* message, Point pos, double scale, SDL_Color color, bool wrap);
-void set_pixel(SDL_Renderer *rend, int x, int y, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
 void switch2(enum Mode to);
-void update_pos_children(Node* node, double leftmost_bound, double rightmost_bound, double level);
 void write2File();
 void writeChildrenStrings(FILE* file, Node* node, int level);
 
@@ -267,11 +259,6 @@ void hintFunction(Node* node){
         switch2( Travel );
 }
 
-double clip(double num, double min, double max){
-    if ( num < min ) return min;
-    if ( num > max ) return max;
-    return num;
-}
 int min(int a, int b){ if (a < b ) return a; else return b; }
 int max(int a, int b){ if (a > b ) return a; else return b; }
 
@@ -458,12 +445,6 @@ void handleTextInput(SDL_Event *event){
        }
        log_print("Handled hint input.\n");
    }
-}
-
-/* Sets value of a single pixel on the screen */
-void set_pixel(SDL_Renderer *rend, int x, int y, Uint8 r, Uint8 g, Uint8 b, Uint8 a) {
-    SDL_SetRenderDrawColor(rend, r,g,b,a);
-    SDL_RenderDrawPoint(rend, x, y);
 }
 
 void drawBox(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int offset, Uint8 r, Uint8 g, Uint8 b, Uint8 a){
