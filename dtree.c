@@ -243,7 +243,7 @@ static TTF_Font* FONT;          // Global Font object
 static Array* HINT_NODES;       // array of all nodes to be hinted to
 static Buffer* CURRENT_BUFFER;  // buffer to store current hint progress
 static Node* CUT = NULL;
-static bool TOGGLE_MODE=0;
+static bool TOGGLE_MODE = false;
 static char* TOGGLE_INDICATOR = "MODE PERSIST\0";
 static Node* LEFT_NEIGHBOR = NULL; // left and right neighbors of the selected node
 static Node* RIGHT_NEIGHBOR = NULL;
@@ -551,7 +551,7 @@ void switchMode(enum Mode to){
             to = Edit;
             break;
         case Travel:
-            TOGGLE_MODE = 0;
+            TOGGLE_MODE = false;
             break;
     }
     MODE = to;
@@ -689,13 +689,13 @@ void doKeyUp(SDL_KeyboardEvent *event) {
                     switchMode(Edit);
                     return;
                 case SDLK_c:
-                    TOGGLE_MODE = 1;
+                    TOGGLE_MODE = true;
                     return;
                 case SDLK_w:
                     writeFile();
                     return;
                 case SDLK_q:
-                    APP.quit = 1;
+                    APP.quit = true;
                     return;
             }
             break; // end of Travel bindings
@@ -1036,7 +1036,7 @@ void initSDL() {
         logPrint("Failed to create renderer: %s\n", SDL_GetError());
         exit(1);
     }
-    APP.quit = 0;
+    APP.quit = false;
     SDL_GetWindowSize(APP.window, &APP.window_size.x, &APP.window_size.y);
 
     /* start SDL_ttf */
@@ -1070,7 +1070,7 @@ int main(int argc, char *argv[]) {
     switchMode(Travel);
     /* gracefully close windows on exit of program */
     atexit(SDL_Quit);
-    APP.quit = 0;
+    APP.quit = false;
 
     SDL_Event e;
     /* Only updates display and processes inputs on new events */
