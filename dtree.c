@@ -231,10 +231,10 @@ void makeGraph(Graph* graph){
 }
 
 
-/* Globals */
-static App app;                 // App object that contains rendering info
-static Graph graph;             // Graph object that contains nodes
-static enum Mode mode;          // Global mode
+/* Global variables */
+static App APP;                 // App object that contains rendering info
+static Graph GRAPH;             // Graph object that contains nodes
+static enum Mode MODE;          // Global mode
 // {ptr, cur_len, max_size} for hints
 static Buffer HINT_BUFFER = {NULL, 0, HINT_BUFFER_MAX_SIZE};
 // {ptr, cur_len, max_size} for fname
@@ -245,23 +245,23 @@ static Buffer* CURRENT_BUFFER;  // buffer to store current hint progress
 static Node* CUT = NULL;
 static bool TOGGLE_MODE=0;
 static char* TOGGLE_INDICATOR = "MODE PERSIST\0";
-static Node* left_neighbor = NULL; // left and right neighbors of the selected node
-static Node* right_neighbor = NULL;
+static Node* LEFT_NEIGHBOR = NULL; // left and right neighbors of the selected node
+static Node* RIGHT_NEIGHBOR = NULL;
 
 
 // GENERAL UTIL FUNCTIONS
 
 // Utility function for removing a node & subtree from graph
 void removeNodeFromGraph(Node* node){
-    if ( node == graph.root ) return;
+    if ( node == GRAPH.root ) return;
     log_print("Removing node from graph...\n");
     // remove node from parent's children
     removeFromArray(node->p->children, node);
     // remove hint memory for this node & subtree
     removeSubtreeFromArray(HINT_NODES, node);
     // if the currently selected node would be deleted, bubble up to the parent
-    if ( isInSubtree(graph.selected, node) )
-        graph.selected = node->p;
+    if ( isInSubtree(GRAPH.selected, node) )
+        GRAPH.selected = node->p;
     // free memory for this node and its subtree
     deleteNode(node);
     log_print("Removed node from graph.\n");
@@ -354,11 +354,11 @@ void readfile(){
     Node** hierarchy = calloc(MAX_TEXT_LEN, sizeof(Node*));
     unsigned int level = 0;
     /* Load graph root manually */
-    hierarchy[0] = graph.root;
+    hierarchy[0] = GRAPH.root;
     endAtNewline(ret, strlen(ret));
     replaceChar(ret, '|', '\n');
-    strcpy(graph.root->text.buf, ret);
-    graph.root->text.len = strlen(ret);
+    strcpy(GRAPH.root->text.buf, ret);
+    GRAPH.root->text.len = strlen(ret);
     while ( true ){
         /* loads next line */
         ret = fgets(buf, MAX_TEXT_LEN, fp);
@@ -395,7 +395,7 @@ void writeChildrenStrings(FILE* file, Node* node, int level){
 void write2File(){
     if ( FILENAME_BUFFER.buf == NULL ) return;
     FILE* output = fopen(FILENAME_BUFFER.buf, "w");
-    writeChildrenStrings(output, graph.root, 0);
+    writeChildrenStrings(output, GRAPH.root, 0);
     fclose(output);
 }
 
@@ -403,8 +403,8 @@ void write2File(){
 // HINT MANAGEMENT
 
 void calculate_neighbors(Node* root, Node* selected) {
-    left_neighbor = NULL;
-    right_neighbor = NULL;
+    LEFT_NEIGHBOR = NULL;
+    RIGHT_NEIGHBOR = NULL;
     if (selected == root)
        return;
 
@@ -434,9 +434,9 @@ void calculate_neighbors(Node* root, Node* selected) {
     }
     if (found) {
         if(node_depths[index] == node_depths[index-1])
-            left_neighbor = queue[index-1];
+            LEFT_NEIGHBOR = queue[index-1];
         if(node_depths[index] == node_depths[index+1])
-            right_neighbor = queue[index+1];
+            RIGHT_NEIGHBOR = queue[index+1];
     }
     free(queue);
     free(node_depths);
@@ -468,8 +468,8 @@ void populateHintNodes(Node* node){
     if ( !node )
         return;
     log_print("Adding hint node: %dx%d\n", node->pos.x, node->pos.y);
-    if ( -(2*getWidth(node->text.buf, 1)) <= node->pos.x && node->pos.x < app.window_size.x+(2*getWidth(node->text.buf, 1)) &&\
-            RADIUS < node->pos.y && node->pos.y < app.window_size.y+(2*getHeight(node->text.buf, 1))) {
+    if ( -(2*getWidth(node->text.buf, 1)) <= node->pos.x && node->pos.x < APP.window_size.x+(2*getWidth(node->text.buf, 1)) &&\
+            RADIUS < node->pos.y && node->pos.y < APP.window_size.y+(2*getHeight(node->text.buf, 1))) {
         insertArray(HINT_NODES, node);
     }
     for (int i = 0; i < node->children->num; ++i) {
@@ -481,10 +481,10 @@ void populateHintNodes(Node* node){
 void populateHintText(Node* node){
 
     log_print("Populate start\n");
-    calculate_neighbors(graph.root, graph.selected);
+    calculate_neighbors(GRAPH.root, GRAPH.selected);
     clearHintText();
     HINT_NODES = initArray(10);
-    populateHintNodes(graph.root);
+    populateHintNodes(GRAPH.root);
     log_print("Cleared\n");
     log_print("%p: %s\n",node->p->hint_text, node->p->hint_text);
     char** queue = calloc(8192, sizeof(char*));
@@ -520,12 +520,12 @@ void populateHintText(Node* node){
     }
     free(queue);
 
-    // parent is 'k', left_neighbor 'h', right neighbor 'l'
+    // parent is 'k', left neighbor 'h', right neighbor 'l'
     strcpy(node->p->hint_text,"k");
-    if (left_neighbor)
-        strcpy(left_neighbor->hint_text, "h");
-    if (right_neighbor)
-        strcpy(right_neighbor->hint_text, "l");
+    if (LEFT_NEIGHBOR)
+        strcpy(LEFT_NEIGHBOR->hint_text, "h");
+    if (RIGHT_NEIGHBOR)
+        strcpy(RIGHT_NEIGHBOR->hint_text, "l");
     log_print("Populate end.\n");
 }
 
@@ -533,32 +533,32 @@ void populateHintText(Node* node){
 // EVENT HANDLING
 
 void activateHints(){
-    populateHintText(graph.selected);
+    populateHintText(GRAPH.selected);
     CURRENT_BUFFER = &HINT_BUFFER;
 }
 
 void switch2(enum Mode to){
-    if ( isHintMode(mode) ){
+    if ( isHintMode(MODE) ){
         HINT_NODES = freeArray (HINT_NODES);
         clearBuffer(&HINT_BUFFER);
     }
     switch ( to ){
         case Edit:
-            mode = Edit;
-            CURRENT_BUFFER = &graph.selected->text;
+            MODE = Edit;
+            CURRENT_BUFFER = &GRAPH.selected->text;
             break;
         case FilenameEdit:
-            mode = Edit;
+            MODE = Edit;
             CURRENT_BUFFER = &FILENAME_BUFFER;
             break;
         case Travel:
-            mode = Travel;
+            MODE = Travel;
             TOGGLE_MODE = 0;
             break;
-        case MakeChild: mode = MakeChild; break;
-        case Delete:    mode = Delete; break;
-        case Cut:       mode = Cut; break;
-        case Paste:     mode = Paste; break;
+        case MakeChild: MODE = MakeChild; break;
+        case Delete:    MODE = Delete; break;
+        case Cut:       MODE = Cut; break;
+        case Paste:     MODE = Paste; break;
     }
     if ( isHintMode(to) )
         activateHints();
@@ -566,8 +566,8 @@ void switch2(enum Mode to){
 
 // When a hint node is selected, this function is run
 void hintFunction(Node* node){
-    switch(mode){
-        case Travel: graph.selected = node; break;
+    switch(MODE){
+        case Travel: GRAPH.selected = node; break;
         case Delete: removeNodeFromGraph(node); break;
         case Cut: CUT = node; switch2(Paste); break;
         case MakeChild: makeChild(node); activateHints(); break;
@@ -581,7 +581,7 @@ void hintFunction(Node* node){
             break;
         default: break;
     }
-    if ( TOGGLE_MODE == false && mode != Paste )
+    if ( TOGGLE_MODE == false && MODE != Paste )
         switch2( Travel );
 }
 
@@ -593,7 +593,7 @@ void handleTextInput(SDL_Event *event){
         log_print("Adding text to current buffer...\n");
         int add_text = 1;
         // skip adding to buffer for hint modes if not a valid hint char
-        if ( isHintMode(mode) ){
+        if ( isHintMode(MODE) ){
             add_text = 0;
             for (int i = 0; i < strlen(HINT_CHARS); ++i){
                 if ( HINT_CHARS[i] == event->edit.text[0] ){
@@ -608,7 +608,7 @@ void handleTextInput(SDL_Event *event){
         log_print("Detected character: %c\n", event->edit.text[0]);
         log_print("New CURRENT_BUFFER: len %d: %s\n", CURRENT_BUFFER->len, CURRENT_BUFFER->buf);
     }
-    if ( isHintMode(mode) ){
+    if ( isHintMode(MODE) ){
         // go to node specified by travel chars
         log_print("Handling travel input: %d/%d chars\n", HINT_BUFFER.len, HINT_BUFFER.size);
         // check if any nodes hint text matches current input
@@ -624,9 +624,9 @@ void handleTextInput(SDL_Event *event){
             log_print("Freed hint buffer\n");
              
             log_print("Re-calculating positions of nodes...\n");
-            calculate_positions(graph.root, graph.selected);
+            calculate_positions(GRAPH.root, GRAPH.selected);
             log_print("Populating hint text...\n");
-            populateHintText(graph.selected);
+            populateHintText(GRAPH.selected);
             log_print("Populated.\n");
         }
         log_print("Handled hint input.\n");
@@ -634,7 +634,7 @@ void handleTextInput(SDL_Event *event){
 }
 
 void doKeyDown(SDL_KeyboardEvent *event) {
-    if ( isEditMode(mode) ){
+    if ( isEditMode(MODE) ){
         switch(event->keysym.sym) {
             case SDLK_BACKSPACE:
                 if ( CURRENT_BUFFER && CURRENT_BUFFER->len > 0)
@@ -651,13 +651,13 @@ void doKeyUp(SDL_KeyboardEvent *event) {
     // up-front key-checks that apply to any mode
     switch(event->keysym.sym) {
         case SDLK_ESCAPE:
-            if (mode == Travel) CUT = NULL; // clear cut node on a double escape
+            if (MODE == Travel) CUT = NULL; // clear cut node on a double escape
             switch2(Travel);
             return;
     }
 
     // mode-specific key-bindings
-    switch(mode) {
+    switch(MODE) {
     case Travel:
         switch(event->keysym.sym) {
             case SDLK_o: { switch2(MakeChild); return; }
@@ -666,10 +666,10 @@ void doKeyUp(SDL_KeyboardEvent *event) {
             case SDLK_x: { switch2(Delete); return; }
             case SDLK_m: { switch2(Cut); return; }
             case SDLK_p: { switch2(Paste); return; }
-            case SDLK_s: { clearBuffer(&graph.selected->text); switch2(Edit); return; }
+            case SDLK_s: { clearBuffer(&GRAPH.selected->text); switch2(Edit); return; }
             case SDLK_c: { TOGGLE_MODE = 1; return; }
             case SDLK_w: { write2File(); return; }
-            case SDLK_q: {app.quit=1; return;}
+            case SDLK_q: {APP.quit=1; return;}
         }
         break; // end of Travel bindings
     case Edit: {
@@ -696,7 +696,7 @@ void eventHandler(SDL_Event *event) {
         case SDL_QUIT:      { exit(0);                break; }
         case SDL_WINDOWEVENT:
             if(event->window.event == SDL_WINDOWEVENT_RESIZED)
-                SDL_GetWindowSize(app.window, &app.window_size.x, &app.window_size.y);
+                SDL_GetWindowSize(APP.window, &APP.window_size.x, &APP.window_size.y);
             break;
         default: break;
     }
@@ -775,7 +775,7 @@ void calculate_max_heights(Node* node, int level, int* max_heights) {
 // recursive helper function for calculate_positions
 // accumulates offsets to assign correct [x,y] values to each node
 void apply_offsets(Node* node, int x_offset, int level, int* y_levels) {
-    node->pos.x = x_offset + app.window_size.x/2;
+    node->pos.x = x_offset + APP.window_size.x/2;
     if (level > 0) {
         node->pos.y = node->p->pos.y + y_levels[level-1]/2 + y_levels[level]/2;
     }
@@ -787,8 +787,8 @@ void apply_offsets(Node* node, int x_offset, int level, int* y_levels) {
 
 // shifts all node positions so that the selected node is at the center of the screen
 void center_on_selected(Node* node, int selected_x, int selected_y) {
-    node->pos.x += app.window_size.x/2 - selected_x;
-    node->pos.y += app.window_size.y/2 - selected_y;
+    node->pos.x += APP.window_size.x/2 - selected_x;
+    node->pos.y += APP.window_size.y/2 - selected_y;
     for (int i = 0; i < node->children->num; i++) {
         Node* child = node->children->array[i];
         center_on_selected(child, selected_x, selected_y);
@@ -806,7 +806,7 @@ void calculate_positions(Node* root, Node* selected){
     log_print("Applying offsets...\n");
     apply_offsets(root, 0, 0, y_levels);
     log_print("Centering...\n");
-    center_on_selected(root, graph.selected->pos.x, graph.selected->pos.y);
+    center_on_selected(root, GRAPH.selected->pos.x, GRAPH.selected->pos.y);
     log_print("Positions calculated.\n");
 
     free(y_levels);
@@ -837,7 +837,7 @@ void renderMessage(char* message, Point pos, double scale, SDL_Color color, bool
         surfaceMessage = TTF_RenderText_Solid(FONT, message, color);
 
     // now you can convert it into a texture
-    SDL_Texture* Message = SDL_CreateTextureFromSurface(app.renderer, surfaceMessage);
+    SDL_Texture* Message = SDL_CreateTextureFromSurface(APP.renderer, surfaceMessage);
 
     SDL_Rect Message_rect;
     Message_rect.x = pos.x;
@@ -845,10 +845,10 @@ void renderMessage(char* message, Point pos, double scale, SDL_Color color, bool
     Message_rect.w = getWidth(message, wrap) * scale;
     Message_rect.h = getHeight(message, wrap) * scale;
 
-    SDL_SetRenderDrawColor(app.renderer, BACKGROUND_COLOR[0], BACKGROUND_COLOR[1], BACKGROUND_COLOR[2], BACKGROUND_COLOR[3]);
-    SDL_RenderFillRect(app.renderer, &Message_rect);
+    SDL_SetRenderDrawColor(APP.renderer, BACKGROUND_COLOR[0], BACKGROUND_COLOR[1], BACKGROUND_COLOR[2], BACKGROUND_COLOR[3]);
+    SDL_RenderFillRect(APP.renderer, &Message_rect);
     log_print("Rendering %s %d %d\n", message, Message_rect.w, Message_rect.h);
-    SDL_RenderCopy(app.renderer, Message, NULL, &Message_rect);
+    SDL_RenderCopy(APP.renderer, Message, NULL, &Message_rect);
     SDL_FreeSurface(surfaceMessage);
     SDL_DestroyTexture(Message);
 }
@@ -880,16 +880,16 @@ void drawNode(Node* node) {
     int width  = getWidth(node->text.buf, 1);
     int height = getHeight(node->text.buf, 1);
     if (node == CUT)
-        drawBorder(app.renderer, x, y, width, height, THICKNESS, CUT_COLOR[0], CUT_COLOR[1], CUT_COLOR[2], CUT_COLOR[3]);
-    else if (node == graph.selected)
-        drawBorder(app.renderer, x, y, width, height, THICKNESS, SELECTED_COLOR[0], SELECTED_COLOR[1], SELECTED_COLOR[2], SELECTED_COLOR[3]);
+        drawBorder(APP.renderer, x, y, width, height, THICKNESS, CUT_COLOR[0], CUT_COLOR[1], CUT_COLOR[2], CUT_COLOR[3]);
+    else if (node == GRAPH.selected)
+        drawBorder(APP.renderer, x, y, width, height, THICKNESS, SELECTED_COLOR[0], SELECTED_COLOR[1], SELECTED_COLOR[2], SELECTED_COLOR[3]);
     else
-        drawBorder(app.renderer, x, y, width, height, THICKNESS, UNSELECTED_COLOR[0], UNSELECTED_COLOR[1], UNSELECTED_COLOR[2], UNSELECTED_COLOR[3]);
+        drawBorder(APP.renderer, x, y, width, height, THICKNESS, UNSELECTED_COLOR[0], UNSELECTED_COLOR[1], UNSELECTED_COLOR[2], UNSELECTED_COLOR[3]);
 
     /* draw edges between parent and child nodes */
-    if (node != graph.root){
-        SDL_SetRenderDrawColor(app.renderer, EDGE_COLOR[0], EDGE_COLOR[1], EDGE_COLOR[2], EDGE_COLOR[3]);
-        SDL_RenderDrawLine(app.renderer, x, y - (height/2), node->p->pos.x, node->p->pos.y + (getHeight(node->p->text.buf, 1) / 2));
+    if (node != GRAPH.root){
+        SDL_SetRenderDrawColor(APP.renderer, EDGE_COLOR[0], EDGE_COLOR[1], EDGE_COLOR[2], EDGE_COLOR[3]);
+        SDL_RenderDrawLine(APP.renderer, x, y - (height/2), node->p->pos.x, node->p->pos.y + (getHeight(node->p->text.buf, 1) / 2));
     }
 
     Point message_pos;
@@ -899,7 +899,7 @@ void drawNode(Node* node) {
     /* render node text */
     renderMessage(node->text.buf, message_pos, 1.0, EDIT_COLOR, 1);
     /* render hint text */
-    if ( isHintMode(mode) && strlen(node->hint_text) > 0 ){
+    if ( isHintMode(MODE) && strlen(node->hint_text) > 0 ){
         // dont render hint text that doesn't match hint buffer
         bool render_hint = true;
         if (HINT_BUFFER.len > 0){
@@ -927,44 +927,44 @@ void drawNode(Node* node) {
 
 /* re-computes graph and draws everything onto renderer */
 void prepareScene() {
-    SDL_SetRenderDrawColor(app.renderer, BACKGROUND_COLOR[0], BACKGROUND_COLOR[1], BACKGROUND_COLOR[2], BACKGROUND_COLOR[3]); /* Background color */
-    SDL_RenderClear(app.renderer);
+    SDL_SetRenderDrawColor(APP.renderer, BACKGROUND_COLOR[0], BACKGROUND_COLOR[1], BACKGROUND_COLOR[2], BACKGROUND_COLOR[3]); /* Background color */
+    SDL_RenderClear(APP.renderer);
 
     // recompute the coordinates of each node in the tree
-    calculate_positions(graph.root, graph.selected);
+    calculate_positions(GRAPH.root, GRAPH.selected);
 
     // Draw Graph
-    drawNode(graph.root);
+    drawNode(GRAPH.root);
 
     // Draw filename
     Point filename_pos;
-    filename_pos.x = (int) ((0.0) * app.window_size.x);
-    filename_pos.y = (int) ((1.0) * app.window_size.y - TEXTBOX_HEIGHT);
+    filename_pos.x = (int) ((0.0) * APP.window_size.x);
+    filename_pos.y = (int) ((1.0) * APP.window_size.y - TEXTBOX_HEIGHT);
     renderMessage(FILENAME_BUFFER.buf, filename_pos, 1.0, EDIT_COLOR, 0);
 
     // Draw mode
     Point mode_text_pos;
-    mode_text_pos.x = (int) ((0.0) * app.window_size.x);
-    mode_text_pos.y = (int) ((0.0) * app.window_size.y);
-    renderMessage(getModeName(mode), mode_text_pos, 1.0, EDIT_COLOR, 0);
+    mode_text_pos.x = (int) ((0.0) * APP.window_size.x);
+    mode_text_pos.y = (int) ((0.0) * APP.window_size.y);
+    renderMessage(getModeName(MODE), mode_text_pos, 1.0, EDIT_COLOR, 0);
 
     //Draw hint buffer
     Point hint_buf_pos;
-    hint_buf_pos.x = (int) ((1.0 * app.window_size.x) - (HINT_BUFFER.len * TEXTBOX_WIDTH_SCALE));
-    hint_buf_pos.y = (int) ((1.0) * app.window_size.y - TEXTBOX_HEIGHT);
+    hint_buf_pos.x = (int) ((1.0 * APP.window_size.x) - (HINT_BUFFER.len * TEXTBOX_WIDTH_SCALE));
+    hint_buf_pos.y = (int) ((1.0) * APP.window_size.y - TEXTBOX_HEIGHT);
     renderMessage(HINT_BUFFER.buf, hint_buf_pos, 1.0, HINT_COLOR, 0);
 
     if ( TOGGLE_MODE ){
         Point toggle_indicator_pos;
-        toggle_indicator_pos.x = (int) ((1.0 * app.window_size.x) - (strlen(TOGGLE_INDICATOR) * TEXTBOX_WIDTH_SCALE));
-        toggle_indicator_pos.y = (int) ((0.0) * app.window_size.y);
+        toggle_indicator_pos.x = (int) ((1.0 * APP.window_size.x) - (strlen(TOGGLE_INDICATOR) * TEXTBOX_WIDTH_SCALE));
+        toggle_indicator_pos.y = (int) ((0.0) * APP.window_size.y);
         renderMessage(TOGGLE_INDICATOR, toggle_indicator_pos, 1.0, EDIT_COLOR, 0);
     }
 }
 
 /* actually renders the screen */
 void presentScene() {
-    SDL_RenderPresent(app.renderer);
+    SDL_RenderPresent(APP.renderer);
 }
 
 
@@ -983,22 +983,22 @@ void initSDL() {
     }
     log_print("Initialized video.\n");
 
-    app.window = SDL_CreateWindow("dtree", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, windowFlags);
+    APP.window = SDL_CreateWindow("dtree", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, windowFlags);
 
-    if (!app.window) {
+    if (!APP.window) {
         printf("Failed to open %d x %d window: %s\n", SCREEN_WIDTH, SCREEN_HEIGHT, SDL_GetError());
         exit(1);
     }
     log_print("Creating renderer...\n");
-    app.renderer = SDL_CreateRenderer(app.window, -1, rendererFlags);
+    APP.renderer = SDL_CreateRenderer(APP.window, -1, rendererFlags);
     log_print("Render created.\n");
 
-    if (!app.renderer) {
+    if (!APP.renderer) {
         log_print("Failed to create renderer: %s\n", SDL_GetError());
         exit(1);
     }
-    app.quit = 0;
-    SDL_GetWindowSize(app.window, &app.window_size.x, &app.window_size.y);
+    APP.quit = 0;
+    SDL_GetWindowSize(APP.window, &APP.window_size.x, &APP.window_size.y);
 
     /* start SDL_ttf */
     if(TTF_Init()==-1){
@@ -1011,11 +1011,11 @@ void initSDL() {
 
 int main(int argc, char *argv[]) {
     /* set all bytes of App memory to zero */
-    memset(&app, 0, sizeof(App));
+    memset(&APP, 0, sizeof(App));
     /* set up window, screen, and renderer */
     initSDL();
 
-    makeGraph(&graph);
+    makeGraph(&GRAPH);
 
     FILENAME_BUFFER.buf = calloc(FILENAME_BUFFER.size, sizeof(char));
     if ( argc > 1 )
@@ -1031,11 +1031,11 @@ int main(int argc, char *argv[]) {
     switch2(Travel);
     /* gracefully close windows on exit of program */
     atexit(SDL_Quit);
-    app.quit = 0;
+    APP.quit = 0;
 
     SDL_Event e;
     /* Only updates display and processes inputs on new events */
-    while ( !app.quit && SDL_WaitEvent(&e) ) {
+    while ( !APP.quit && SDL_WaitEvent(&e) ) {
         if ( e.type == SDL_MOUSEMOTION) continue;
         /* Handle input before rendering */
         eventHandler(&e);
@@ -1055,10 +1055,10 @@ int main(int argc, char *argv[]) {
     if (HINT_BUFFER.buf) free(HINT_BUFFER.buf);
     free(FILENAME_BUFFER.buf);
     /* delete nodes recursively, starting from root */
-    removeNodeFromGraph(graph.root);
+    removeNodeFromGraph(GRAPH.root);
     log_print("Deleted all nodes\n");
-    SDL_DestroyRenderer( app.renderer );
-    SDL_DestroyWindow( app.window );
+    SDL_DestroyRenderer( APP.renderer );
+    SDL_DestroyWindow( APP.window );
     SDL_Quit();
     return 0;
 }
