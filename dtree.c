@@ -39,6 +39,7 @@ static const char* FONT_NAME = "./assets/SourceCodePro-Regular.otf";   // Defaul
 static const char* HINT_CHARS = "adfghjkl;\0";              // characters to use for hints
 
 
+// ENUMS AND DATA STRUCTURES
 typedef struct Point Point;
 typedef struct App App;
 typedef struct Buffer Buffer;
@@ -46,7 +47,6 @@ typedef struct Array Array;
 typedef struct Node Node;
 typedef struct Graph Graph;
 
-// ENUMS AND DATA STRUCTURES
 enum Mode{Travel, Edit, FilenameEdit, Delete, Cut, Paste, MakeChild};
 char* getModeName(enum Mode mode_param){
     switch(mode_param) {
@@ -95,6 +95,7 @@ struct Buffer {
     int len;
     int size;
 };
+
 void clearBuffer(Buffer* buffer){
     for (int i = 0; i < buffer->len; ++i)
         buffer->buf[i] = '\0';
@@ -248,38 +249,7 @@ static Node* left_neighbor = NULL; // left and right neighbors of the selected n
 static Node* right_neighbor = NULL;
 
 
-void activateHints();
-void clearHintText();
-unsigned int countTabs(char* string);
-void doKeyUp(SDL_KeyboardEvent *event);
-void doKeyDown(SDL_KeyboardEvent *event);
-void drawBox(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
-void drawNode(Node* node);
-void drawBorder(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
-void endAtNewline(char* string, int textlen);
-void eventHandler(SDL_Event *event);
-int getWidth (char* message, bool wrap);
-int getHeight (char* message, bool wrap);
-void handleTextInput(SDL_Event *event);
-void initSDL();
-int min(int a, int b);
-int max(int a, int b);
-int get_depth(Node* node);
-void calculate_x_offsets(Node* node);
-void calculate_max_heights(Node* node, int level, int* max_heights);
-void apply_offsets(Node* node, int x_offset, int level, int* y_levels);
-void center_on_selected(Node* node, int selected_x, int selected_y);
-void calculate_positions(Node* root, Node* selected);
-void calculate_neighbors(Node* root, Node* selected);
-void populateHintText(Node* node);
-void presentScene();
-void prepareScene();
-void readfile();
-void renderMessage(char* message, Point pos, double scale, SDL_Color color, bool wrap);
-void switch2(enum Mode to);
-void write2File();
-void writeChildrenStrings(FILE* file, Node* node, int level);
-
+// GENERAL UTIL FUNCTIONS
 
 // Utility function for removing a node & subtree from graph
 void removeNodeFromGraph(Node* node){
@@ -297,12 +267,78 @@ void removeNodeFromGraph(Node* node){
     log_print("Removed node from graph.\n");
 }
 
+int min(int a, int b){ if (a < b ) return a; else return b; }
+int max(int a, int b){ if (a > b ) return a; else return b; }
+
+// return graphical width of text (with or without text wrapping)
+int getWidth (char* message, bool wrap){
+    int ret;
+    if ( wrap ){
+        for (int i = 0; i < strlen(message); ++i) {
+            if ( i > 0 && message[i-1] == '\n' ){
+                return NUM_CHARS_B4_WRAP * TEXTBOX_WIDTH_SCALE;
+            }
+        }
+        ret = min( strlen(message), NUM_CHARS_B4_WRAP) * TEXTBOX_WIDTH_SCALE;
+    }
+    else
+        ret = strlen(message) * TEXTBOX_WIDTH_SCALE;
+    return ret;
+}
+// return graphical height of text (with or without text wrapping)
+int getHeight (char* message, bool wrap){
+    if ( wrap ){
+        int num_lines=1, chars_since_line_start=0, chars_since_last_space=0;
+        for (int i = 0; i < strlen(message); ++i) {
+            if ( chars_since_line_start >= NUM_CHARS_B4_WRAP && message[i] != ' ' && message[i] != '\n' ) {
+                chars_since_line_start = chars_since_last_space -1;
+                num_lines++;
+            }
+            if ( message[i] == ' ' )
+                chars_since_last_space = 0;
+            if ( message[i] == '\n' && i < strlen(message) - 1){
+                chars_since_last_space = 0;
+                chars_since_line_start = -1;
+                num_lines++;
+            }
+            chars_since_line_start++;
+            chars_since_last_space++;
+        }
+        return TEXTBOX_HEIGHT * num_lines;
+    }
+    else
+        return TEXTBOX_HEIGHT;
+}
+
+
+// READ/WRITE
+
 // We replace user-entered \n with | for the file format
 void replaceChar(char* arr, char find, char replace){
     for (int i = 0; i < strlen(arr); ++i)
         if ( arr[i] == find )
             arr[i] = replace;
     return;
+}
+
+unsigned int countTabs(char* string){
+    unsigned int num_tabs = 0;
+    for (int i=0; i<strlen(string); i++){
+        if (string[i] == '\t')
+            num_tabs++;
+        else
+            break;
+    }
+    return num_tabs;
+}
+
+void endAtNewline(char* string, int textlen){
+    for (int i = 0; i < textlen; ++i) {
+        if (string[i] == '\n') {
+            string[i] = '\0';
+            break;
+        }
+    }
 }
 
 void readfile(){
@@ -362,69 +398,139 @@ void write2File(){
     writeChildrenStrings(output, graph.root, 0);
     fclose(output);
 }
-// When a hint node is selected, this function is run
-void hintFunction(Node* node){
-    switch(mode){
-        case Travel: graph.selected = node; break;
-        case Delete: removeNodeFromGraph(node); break;
-        case Cut: CUT = node; switch2(Paste); break;
-        case MakeChild: makeChild(node); break;
-        case Paste:
-            if ( !CUT ) break;
-            removeFromArray(CUT->p->children, CUT);
-            insertArray(node->children, CUT);
-            CUT->p = node;
-            calculate_positions(graph.root, graph.selected);
-            CUT = NULL;
-            switch2( Cut );
+
+
+// HINT MANAGEMENT
+
+void calculate_neighbors(Node* root, Node* selected) {
+    left_neighbor = NULL;
+    right_neighbor = NULL;
+    if (selected == root)
+       return;
+
+    //                     buffer overflow waiting to happen
+    //                     VVVV 
+    Node** queue =  calloc(8192, sizeof(Node*)); 
+    int* node_depths =  calloc(8192, sizeof(int)); 
+    
+    queue[0] = root;
+    int index = 0;
+    int queue_len = 1;
+    bool found = false;
+
+    while ( index != queue_len ) {
+        Node* cur = queue[index];
+        if (index > 0 && queue[index] == selected) {
+            found = true;
             break;
-        default: break;
+        }
+        // add children to the queue
+        for(int i = 0; i < cur->children->num; i++) {
+            queue[queue_len] = cur->children->array[i];
+            node_depths[queue_len] = node_depths[index]+1;
+            queue_len++;
+        }
+        index++;
     }
-    if ( TOGGLE_MODE == false && mode != Paste )
-        switch2( Travel );
+    if (found) {
+        if(node_depths[index] == node_depths[index-1])
+            left_neighbor = queue[index-1];
+        if(node_depths[index] == node_depths[index+1])
+            right_neighbor = queue[index+1];
+    }
+    free(queue);
+    free(node_depths);
 }
 
-int min(int a, int b){ if (a < b ) return a; else return b; }
-int max(int a, int b){ if (a > b ) return a; else return b; }
-
-void initSDL() {
-    HINT_NODES = initArray(10);
-    int rendererFlags, windowFlags;
-    rendererFlags = SDL_RENDERER_ACCELERATED;
-    windowFlags = SDL_WINDOW_RESIZABLE;
-
-    log_print("Initializing video...\n");
-    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-        printf("Couldn't initialize SDL: %s\n", SDL_GetError());
-        exit(1);
-    }
-    log_print("Initialized video.\n");
-
-    app.window = SDL_CreateWindow("dtree", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, windowFlags);
-
-    if (!app.window) {
-        printf("Failed to open %d x %d window: %s\n", SCREEN_WIDTH, SCREEN_HEIGHT, SDL_GetError());
-        exit(1);
-    }
-    log_print("Creating renderer...\n");
-    app.renderer = SDL_CreateRenderer(app.window, -1, rendererFlags);
-    log_print("Render created.\n");
-
-    if (!app.renderer) {
-        log_print("Failed to create renderer: %s\n", SDL_GetError());
-        exit(1);
-    }
-    app.quit = 0;
-    SDL_GetWindowSize(app.window, &app.window_size.x, &app.window_size.y);
-
-    /* start SDL_ttf */
-    if(TTF_Init()==-1){
-        log_print("TTF_Init: %s\n", TTF_GetError());
+void clearHintText() {
+    log_print("clearHintText()\n");
+    // return if already freed
+    if (HINT_NODES == NULL || HINT_NODES->array == NULL){
         return;
     }
-    atexit(TTF_Quit); /* remember to quit SDL_ttf */
-    FONT = TTF_OpenFont(FONT_NAME, FONT_SIZE);
+    log_print("Hint nodes %p, num %ld\n", HINT_NODES->array, HINT_NODES->num);
+    // Clear all hint text in each hint node
+    for (int i = 0; i < HINT_NODES->num; ++i) {
+        for (int j = 0; j < HINT_BUFFER.size; j++) {
+            if (HINT_NODES->array[i]->hint_text){
+                HINT_NODES->array[i]->hint_text[j] = '\0';
+            }
+        }
+    }
+    // Clear hint node array
+    log_print("Freeing HINT_NODES\n");
+    HINT_NODES = freeArray ( HINT_NODES );
+    log_print("End clearHintText()\n");
 }
+
+// Add all visible nodes to HINT_NODES
+void populateHintNodes(Node* node){
+    if ( !node )
+        return;
+    log_print("Adding hint node: %dx%d\n", node->pos.x, node->pos.y);
+    if ( -(2*getWidth(node->text.buf, 1)) <= node->pos.x && node->pos.x < app.window_size.x+(2*getWidth(node->text.buf, 1)) &&\
+            RADIUS < node->pos.y && node->pos.y < app.window_size.y+(2*getHeight(node->text.buf, 1))) {
+        insertArray(HINT_NODES, node);
+    }
+    for (int i = 0; i < node->children->num; ++i) {
+        log_print("Going to next child\n");
+        populateHintNodes(node->children->array[i]);
+    }
+}
+
+void populateHintText(Node* node){
+
+    log_print("Populate start\n");
+    calculate_neighbors(graph.root, graph.selected);
+    clearHintText();
+    HINT_NODES = initArray(10);
+    populateHintNodes(graph.root);
+    log_print("Cleared\n");
+    log_print("%p: %s\n",node->p->hint_text, node->p->hint_text);
+    char** queue = calloc(8192, sizeof(char*));
+    char* prefix = calloc(HINT_BUFFER.size+1, sizeof(char));
+    int front = 0, back=0, done=0;
+    while ( !done ){
+        log_print("Iterating while loop, back: %d, front: %d\n", back, front);
+        for (int i = 0; i < strlen(HINT_CHARS); ++i) {
+            // blacklist hard-coded hints
+            if (HINT_CHARS[i] == 'k' || HINT_CHARS[i] == 'h' || HINT_CHARS[i] == 'l')
+                continue;
+
+            queue[back] = calloc(HINT_BUFFER.size+1, sizeof(char));
+            strcpy(queue[back], prefix);
+            queue[back][strlen(prefix)] = HINT_CHARS[i];
+            if ( back - front == HINT_NODES->num){
+                done = 1;
+                break;
+            }
+            back++;
+        }
+        prefix = queue[front++];
+    }
+    for (int i = 0; i < front; ++i) {
+        free(queue[i]);
+    }
+    for (int i = 0; i < HINT_NODES->num; i++) {
+        strcpy(HINT_NODES->array[i]->hint_text, queue[front + i]);
+        free(queue[front + i]);
+    }
+    for (int i = front + HINT_NODES->num; i < back; ++i) {
+        free(queue[i]);
+    }
+    free(queue);
+
+    // parent is 'k', left_neighbor 'h', right neighbor 'l'
+    strcpy(node->p->hint_text,"k");
+    if (left_neighbor)
+        strcpy(left_neighbor->hint_text, "h");
+    if (right_neighbor)
+        strcpy(right_neighbor->hint_text, "l");
+    log_print("Populate end.\n");
+}
+
+
+// EVENT HANDLING
 
 void activateHints(){
     populateHintText(graph.selected);
@@ -456,6 +562,75 @@ void switch2(enum Mode to){
     }
     if ( isHintMode(to) )
         activateHints();
+}
+
+// When a hint node is selected, this function is run
+void hintFunction(Node* node){
+    switch(mode){
+        case Travel: graph.selected = node; break;
+        case Delete: removeNodeFromGraph(node); break;
+        case Cut: CUT = node; switch2(Paste); break;
+        case MakeChild: makeChild(node); activateHints(); break;
+        case Paste:
+            if ( !CUT ) break;
+            removeFromArray(CUT->p->children, CUT);
+            insertArray(node->children, CUT);
+            CUT->p = node;
+            CUT = NULL;
+            switch2( Cut );
+            break;
+        default: break;
+    }
+    if ( TOGGLE_MODE == false && mode != Paste )
+        switch2( Travel );
+}
+
+// temporary hack
+void calculate_positions(Node*, Node*);
+
+void handleTextInput(SDL_Event *event){
+    if ( CURRENT_BUFFER && CURRENT_BUFFER->len < CURRENT_BUFFER->size ){
+        log_print("Adding text to current buffer...\n");
+        int add_text = 1;
+        // skip adding to buffer for hint modes if not a valid hint char
+        if ( isHintMode(mode) ){
+            add_text = 0;
+            for (int i = 0; i < strlen(HINT_CHARS); ++i){
+                if ( HINT_CHARS[i] == event->edit.text[0] ){
+                    add_text = 1;
+                    break;
+                }
+            }
+        }
+
+        if ( add_text && CURRENT_BUFFER->len < CURRENT_BUFFER->size)
+            CURRENT_BUFFER->buf[(CURRENT_BUFFER->len)++] = event->edit.text[0];
+        log_print("Detected character: %c\n", event->edit.text[0]);
+        log_print("New CURRENT_BUFFER: len %d: %s\n", CURRENT_BUFFER->len, CURRENT_BUFFER->buf);
+    }
+    if ( isHintMode(mode) ){
+        // go to node specified by travel chars
+        log_print("Handling travel input: %d/%d chars\n", HINT_BUFFER.len, HINT_BUFFER.size);
+        // check if any nodes hint text matches current input
+        for (int i = 0; i < HINT_NODES->num; ++i) {
+            // continue if hint buffer != any hint text
+            if ( strcmp(HINT_BUFFER.buf, HINT_NODES->array[i]->hint_text) != 0 )
+                continue;
+            hintFunction(HINT_NODES->array[i]);
+            // reset hint text
+
+            log_print("Freeing hint buffer\n");
+            clearBuffer(&HINT_BUFFER);
+            log_print("Freed hint buffer\n");
+             
+            log_print("Re-calculating positions of nodes...\n");
+            calculate_positions(graph.root, graph.selected);
+            log_print("Populating hint text...\n");
+            populateHintText(graph.selected);
+            log_print("Populated.\n");
+        }
+        log_print("Handled hint input.\n");
+    }
 }
 
 void doKeyDown(SDL_KeyboardEvent *event) {
@@ -516,8 +691,8 @@ void doKeyUp(SDL_KeyboardEvent *event) {
 void eventHandler(SDL_Event *event) {
     switch (event->type){
         case SDL_TEXTINPUT: { handleTextInput(event); break; }
-        case SDL_KEYUP:     { doKeyUp(&event->key);   break; }
         case SDL_KEYDOWN:   { doKeyDown(&event->key); break; }
+        case SDL_KEYUP:     { doKeyUp(&event->key);   break; }
         case SDL_QUIT:      { exit(0);                break; }
         case SDL_WINDOWEVENT:
             if(event->window.event == SDL_WINDOWEVENT_RESIZED)
@@ -527,186 +702,8 @@ void eventHandler(SDL_Event *event) {
     }
 }
 
-void handleTextInput(SDL_Event *event){
-    if ( CURRENT_BUFFER && CURRENT_BUFFER->len < CURRENT_BUFFER->size ){
-       log_print("Adding text to current buffer...\n");
-       int add_text = 1;
-       // skip adding to buffer for hint modes if not a valid hint char
-       if ( isHintMode(mode) ){
-           add_text = 0;
-           for (int i = 0; i < strlen(HINT_CHARS); ++i){
-               if ( HINT_CHARS[i] == event->edit.text[0] ){
-                   add_text = 1;
-                   break;
-               }
-           }
-       }
 
-       if ( add_text && CURRENT_BUFFER->len < CURRENT_BUFFER->size)
-           CURRENT_BUFFER->buf[(CURRENT_BUFFER->len)++] = event->edit.text[0];
-       log_print("Detected character: %c\n", event->edit.text[0]);
-       log_print("New CURRENT_BUFFER: len %d: %s\n", CURRENT_BUFFER->len, CURRENT_BUFFER->buf);
-   }
-   if ( isHintMode(mode) ){
-       // go to node specified by travel chars
-       log_print("Handling travel input: %d/%d chars\n", HINT_BUFFER.len, HINT_BUFFER.size);
-       // check if any nodes hint text matches current input
-       for (int i = 0; i < HINT_NODES->num; ++i) {
-           // continue if hint buffer != any hint text
-           if ( strcmp(HINT_BUFFER.buf, HINT_NODES->array[i]->hint_text) != 0 )
-               continue;
-           hintFunction(HINT_NODES->array[i]);
-           // reset hint text
-
-           log_print("Freeing hint buffer\n");
-           clearBuffer(&HINT_BUFFER);
-           log_print("Freed hint buffer\n");
-
-           log_print("Re-calculating positions of nodes...\n");
-           calculate_positions(graph.root, graph.selected);
-           log_print("Populating hint text...\n");
-           populateHintText(graph.selected);
-           log_print("Populated.\n");
-       }
-       log_print("Handled hint input.\n");
-   }
-}
-
-void drawBox(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int offset, Uint8 r, Uint8 g, Uint8 b, Uint8 a){
-    SDL_Rect rect;
-    rect.x = (int) n_cx - ( len  / 2 )  - offset;
-    rect.y = (int) n_cy - ( height / 2 ) - offset;
-    rect.w = len + offset + offset;
-    rect.h = height + offset + offset;
-    SDL_SetRenderDrawColor(surface, r, g, b, a);
-    SDL_RenderDrawRect(surface, &rect);
-}
-
-void drawBorder(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a){
-    for (int i = 0; i < thickness; ++i)
-        drawBox(surface, n_cx , n_cy, len, height, i, r, g, b, a);
-}
-
-/* Renders each node, then renders it's children and draws lines to the children */
-void drawNode(Node* node) {
-    if ( node == NULL ) return;
-
-    log_print("drawNode(%p)\n", node);
-    int x = node->pos.x;
-    int y = node->pos.y;
-    log_print("Children pointer: %p, num: %lu\n", node->children, node->children->num);
-    /* draw red ring for unselected nodes, green for selected */
-    int width  = getWidth(node->text.buf, 1);
-    int height = getHeight(node->text.buf, 1);
-    if (node == CUT)
-        drawBorder(app.renderer, x, y, width, height, THICKNESS, CUT_COLOR[0], CUT_COLOR[1], CUT_COLOR[2], CUT_COLOR[3]);
-    else if (node == graph.selected)
-        drawBorder(app.renderer, x, y, width, height, THICKNESS, SELECTED_COLOR[0], SELECTED_COLOR[1], SELECTED_COLOR[2], SELECTED_COLOR[3]);
-    else
-        drawBorder(app.renderer, x, y, width, height, THICKNESS, UNSELECTED_COLOR[0], UNSELECTED_COLOR[1], UNSELECTED_COLOR[2], UNSELECTED_COLOR[3]);
-
-    /* draw edges between parent and child nodes */
-    if (node != graph.root){
-        SDL_SetRenderDrawColor(app.renderer, EDGE_COLOR[0], EDGE_COLOR[1], EDGE_COLOR[2], EDGE_COLOR[3]);
-        SDL_RenderDrawLine(app.renderer, x, y - (height/2), node->p->pos.x, node->p->pos.y + (getHeight(node->p->text.buf, 1) / 2));
-    }
-
-    Point message_pos;
-    message_pos.x = x - (width / 2);
-    message_pos.y = y - (height / 2);
-
-    /* render node text */
-    renderMessage(node->text.buf, message_pos, 1.0, EDIT_COLOR, 1);
-    /* render hint text */
-    if ( isHintMode(mode) && strlen(node->hint_text) > 0 ){
-        // dont render hint text that doesn't match hint buffer
-        bool render_hint = true;
-        if (HINT_BUFFER.len > 0){
-            for (int i = 0; i < HINT_BUFFER.len; ++i) {
-                if ( HINT_BUFFER.buf[i] != node->hint_text[i] ){
-                    render_hint = false;
-                    break;
-                }
-            }
-        }
-        // position char in center of node
-        if ( render_hint ) {
-            message_pos.x = x  - (int)(width / 2) - THICKNESS;
-            message_pos.y = y  - (int)(height / 2) - THICKNESS - RADIUS;
-            renderMessage(node->hint_text, message_pos, 0.75, HINT_COLOR, 0);
-        }
-    }
-
-    for (int i=0; i<node->children->num; i++){
-        log_print("Drawing child %d / %lu: %p...\n", i, node->children->num, node->children->array[i]);
-        drawNode(node->children->array[i]);
-    }
-    log_print("Finished drawing %p\n", node);
-}
-
-int getWidth (char* message, bool wrap){
-    int ret;
-    if ( wrap ){
-        for (int i = 0; i < strlen(message); ++i) {
-            if ( i > 0 && message[i-1] == '\n' ){
-                return NUM_CHARS_B4_WRAP * TEXTBOX_WIDTH_SCALE;
-            }
-        }
-        ret = min( strlen(message), NUM_CHARS_B4_WRAP) * TEXTBOX_WIDTH_SCALE;
-    }
-    else
-        ret = strlen(message) * TEXTBOX_WIDTH_SCALE;
-    return ret;
-}
-int getHeight (char* message, bool wrap){
-    if ( wrap ){
-        int num_lines=1, chars_since_line_start=0, chars_since_last_space=0;
-        for (int i = 0; i < strlen(message); ++i) {
-            if ( chars_since_line_start >= NUM_CHARS_B4_WRAP && message[i] != ' ' && message[i] != '\n' ) {
-                chars_since_line_start = chars_since_last_space -1;
-                num_lines++;
-            }
-            if ( message[i] == ' ' )
-                chars_since_last_space = 0;
-            if ( message[i] == '\n' && i < strlen(message) - 1){
-                chars_since_last_space = 0;
-                chars_since_line_start = -1;
-                num_lines++;
-            }
-            chars_since_line_start++;
-            chars_since_last_space++;
-        }
-        return TEXTBOX_HEIGHT * num_lines;
-    }
-    else
-        return TEXTBOX_HEIGHT;
-}
-
-void renderMessage(char* message, Point pos, double scale, SDL_Color color, bool wrap){
-    if (!message) return;
-    // create surface from string
-    SDL_Surface* surfaceMessage;
-    if ( wrap )
-        surfaceMessage = TTF_RenderText_Blended_Wrapped(FONT, message, color, NUM_CHARS_B4_WRAP * TEXTBOX_WIDTH_SCALE * scale);
-    else
-        surfaceMessage = TTF_RenderText_Solid(FONT, message, color);
-
-    // now you can convert it into a texture
-    SDL_Texture* Message = SDL_CreateTextureFromSurface(app.renderer, surfaceMessage);
-
-    SDL_Rect Message_rect;
-    Message_rect.x = pos.x;
-    Message_rect.y = pos.y;
-    Message_rect.w = getWidth(message, wrap) * scale;
-    Message_rect.h = getHeight(message, wrap) * scale;
-
-    SDL_SetRenderDrawColor(app.renderer, BACKGROUND_COLOR[0], BACKGROUND_COLOR[1], BACKGROUND_COLOR[2], BACKGROUND_COLOR[3]);
-    SDL_RenderFillRect(app.renderer, &Message_rect);
-    log_print("Rendering %s %d %d\n", message, Message_rect.w, Message_rect.h);
-    SDL_RenderCopy(app.renderer, Message, NULL, &Message_rect);
-    SDL_FreeSurface(surfaceMessage);
-    SDL_DestroyTexture(Message);
-}
+// POSITION CALCULATION ALGORITHM
 
 // returns the height of the tree with given root node
 int get_depth(Node* node) {
@@ -827,44 +824,105 @@ void recursively_print_positions(Node* node, int level){
     }
 }
 
-void calculate_neighbors(Node* root, Node* selected) {
-    left_neighbor = NULL;
-    right_neighbor = NULL;
-    if (selected == root)
-       return;
 
-    //                     buffer overflow waiting to happen
-    //                     VVVV 
-    Node** queue =  calloc(8192, sizeof(Node*)); 
-    int* node_depths =  calloc(8192, sizeof(int)); 
-    
-    queue[0] = root;
-    int index = 0;
-    int queue_len = 1;
-    bool found = false;
+// RENDERING
 
-    while ( index != queue_len ) {
-        Node* cur = queue[index];
-        if (index > 0 && queue[index] == selected) {
-            found = true;
-            break;
-        }
-        // add children to the queue
-        for(int i = 0; i < cur->children->num; i++) {
-            queue[queue_len] = cur->children->array[i];
-            node_depths[queue_len] = node_depths[index]+1;
-            queue_len++;
-        }
-        index++;
+void renderMessage(char* message, Point pos, double scale, SDL_Color color, bool wrap){
+    if (!message) return;
+    // create surface from string
+    SDL_Surface* surfaceMessage;
+    if ( wrap )
+        surfaceMessage = TTF_RenderText_Blended_Wrapped(FONT, message, color, NUM_CHARS_B4_WRAP * TEXTBOX_WIDTH_SCALE * scale);
+    else
+        surfaceMessage = TTF_RenderText_Solid(FONT, message, color);
+
+    // now you can convert it into a texture
+    SDL_Texture* Message = SDL_CreateTextureFromSurface(app.renderer, surfaceMessage);
+
+    SDL_Rect Message_rect;
+    Message_rect.x = pos.x;
+    Message_rect.y = pos.y;
+    Message_rect.w = getWidth(message, wrap) * scale;
+    Message_rect.h = getHeight(message, wrap) * scale;
+
+    SDL_SetRenderDrawColor(app.renderer, BACKGROUND_COLOR[0], BACKGROUND_COLOR[1], BACKGROUND_COLOR[2], BACKGROUND_COLOR[3]);
+    SDL_RenderFillRect(app.renderer, &Message_rect);
+    log_print("Rendering %s %d %d\n", message, Message_rect.w, Message_rect.h);
+    SDL_RenderCopy(app.renderer, Message, NULL, &Message_rect);
+    SDL_FreeSurface(surfaceMessage);
+    SDL_DestroyTexture(Message);
+}
+
+void drawBox(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int offset, Uint8 r, Uint8 g, Uint8 b, Uint8 a){
+    SDL_Rect rect;
+    rect.x = (int) n_cx - ( len  / 2 )  - offset;
+    rect.y = (int) n_cy - ( height / 2 ) - offset;
+    rect.w = len + offset + offset;
+    rect.h = height + offset + offset;
+    SDL_SetRenderDrawColor(surface, r, g, b, a);
+    SDL_RenderDrawRect(surface, &rect);
+}
+
+void drawBorder(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a){
+    for (int i = 0; i < thickness; ++i)
+        drawBox(surface, n_cx , n_cy, len, height, i, r, g, b, a);
+}
+
+/* Renders each node, then renders it's children and draws lines to the children */
+void drawNode(Node* node) {
+    if ( node == NULL ) return;
+
+    log_print("drawNode(%p)\n", node);
+    int x = node->pos.x;
+    int y = node->pos.y;
+    log_print("Children pointer: %p, num: %lu\n", node->children, node->children->num);
+    /* draw red ring for unselected nodes, green for selected */
+    int width  = getWidth(node->text.buf, 1);
+    int height = getHeight(node->text.buf, 1);
+    if (node == CUT)
+        drawBorder(app.renderer, x, y, width, height, THICKNESS, CUT_COLOR[0], CUT_COLOR[1], CUT_COLOR[2], CUT_COLOR[3]);
+    else if (node == graph.selected)
+        drawBorder(app.renderer, x, y, width, height, THICKNESS, SELECTED_COLOR[0], SELECTED_COLOR[1], SELECTED_COLOR[2], SELECTED_COLOR[3]);
+    else
+        drawBorder(app.renderer, x, y, width, height, THICKNESS, UNSELECTED_COLOR[0], UNSELECTED_COLOR[1], UNSELECTED_COLOR[2], UNSELECTED_COLOR[3]);
+
+    /* draw edges between parent and child nodes */
+    if (node != graph.root){
+        SDL_SetRenderDrawColor(app.renderer, EDGE_COLOR[0], EDGE_COLOR[1], EDGE_COLOR[2], EDGE_COLOR[3]);
+        SDL_RenderDrawLine(app.renderer, x, y - (height/2), node->p->pos.x, node->p->pos.y + (getHeight(node->p->text.buf, 1) / 2));
     }
-    if (found) {
-        if(node_depths[index] == node_depths[index-1])
-            left_neighbor = queue[index-1];
-        if(node_depths[index] == node_depths[index+1])
-            right_neighbor = queue[index+1];
+
+    Point message_pos;
+    message_pos.x = x - (width / 2);
+    message_pos.y = y - (height / 2);
+
+    /* render node text */
+    renderMessage(node->text.buf, message_pos, 1.0, EDIT_COLOR, 1);
+    /* render hint text */
+    if ( isHintMode(mode) && strlen(node->hint_text) > 0 ){
+        // dont render hint text that doesn't match hint buffer
+        bool render_hint = true;
+        if (HINT_BUFFER.len > 0){
+            for (int i = 0; i < HINT_BUFFER.len; ++i) {
+                if ( HINT_BUFFER.buf[i] != node->hint_text[i] ){
+                    render_hint = false;
+                    break;
+                }
+            }
+        }
+        // position char in center of node
+        if ( render_hint ) {
+            message_pos.x = x  - (int)(width / 2) - THICKNESS;
+            message_pos.y = y  - (int)(height / 2) - THICKNESS - RADIUS;
+            renderMessage(node->hint_text, message_pos, 0.75, HINT_COLOR, 0);
+        }
     }
-    free(queue);
-    free(node_depths);
+
+    for (int i=0; i<node->children->num; i++){
+        log_print("Drawing child %d / %lu: %p...\n", i, node->children->num, node->children->array[i]);
+        drawNode(node->children->array[i]);
+    }
+    log_print("Finished drawing %p\n", node);
 }
 
 /* re-computes graph and draws everything onto renderer */
@@ -909,111 +967,46 @@ void presentScene() {
     SDL_RenderPresent(app.renderer);
 }
 
-void clearHintText() {
-    log_print("clearHintText()\n");
-    // return if already freed
-    if (HINT_NODES == NULL || HINT_NODES->array == NULL){
-        return;
-    }
-    log_print("Hint nodes %p, num %ld\n", HINT_NODES->array, HINT_NODES->num);
-    // Clear all hint text in each hint node
-    for (int i = 0; i < HINT_NODES->num; ++i) {
-        for (int j = 0; j < HINT_BUFFER.size; j++) {
-            if (HINT_NODES->array[i]->hint_text){
-                HINT_NODES->array[i]->hint_text[j] = '\0';
-            }
-        }
-    }
-    // Clear hint node array
-    log_print("Freeing HINT_NODES\n");
-    HINT_NODES = freeArray ( HINT_NODES );
-    log_print("End clearHintText()\n");
-}
 
-// Add all visible nodes to HINT_NODES
-void populateHintNodes(Node* node){
-    if ( !node )
-        return;
-    log_print("Adding hint node: %dx%d\n", node->pos.x, node->pos.y);
-    if ( -(2*getWidth(node->text.buf, 1)) <= node->pos.x && node->pos.x < app.window_size.x+(2*getWidth(node->text.buf, 1)) &&\
-            RADIUS < node->pos.y && node->pos.y < app.window_size.y+(2*getHeight(node->text.buf, 1))) {
-        insertArray(HINT_NODES, node);
-    }
-    for (int i = 0; i < node->children->num; ++i) {
-        log_print("Going to next child\n");
-        populateHintNodes(node->children->array[i]);
-    }
-}
+// INITIALIZATION AND MAIN
 
-void populateHintText(Node* node){
-
-    log_print("Populate start\n");
-    calculate_neighbors(graph.root, graph.selected);
-    clearHintText();
+void initSDL() {
     HINT_NODES = initArray(10);
-    populateHintNodes(graph.root);
-    log_print("Cleared\n");
-    log_print("%p: %s\n",node->p->hint_text, node->p->hint_text);
-    char** queue = calloc(8192, sizeof(char*));
-    char* prefix = calloc(HINT_BUFFER.size+1, sizeof(char));
-    int front = 0, back=0, done=0;
-    while ( !done ){
-        log_print("Iterating while loop, back: %d, front: %d\n", back, front);
-        for (int i = 0; i < strlen(HINT_CHARS); ++i) {
-            // blacklist hard-coded hints
-            if (HINT_CHARS[i] == 'k' || HINT_CHARS[i] == 'h' || HINT_CHARS[i] == 'l')
-                continue;
+    int rendererFlags, windowFlags;
+    rendererFlags = SDL_RENDERER_ACCELERATED;
+    windowFlags = SDL_WINDOW_RESIZABLE;
 
-            queue[back] = calloc(HINT_BUFFER.size+1, sizeof(char));
-            strcpy(queue[back], prefix);
-            queue[back][strlen(prefix)] = HINT_CHARS[i];
-            if ( back - front == HINT_NODES->num){
-                done = 1;
-                break;
-            }
-            back++;
-        }
-        prefix = queue[front++];
+    log_print("Initializing video...\n");
+    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+        printf("Couldn't initialize SDL: %s\n", SDL_GetError());
+        exit(1);
     }
-    for (int i = 0; i < front; ++i) {
-        free(queue[i]);
-    }
-    for (int i = 0; i < HINT_NODES->num; i++) {
-        strcpy(HINT_NODES->array[i]->hint_text, queue[front + i]);
-        free(queue[front + i]);
-    }
-    for (int i = front + HINT_NODES->num; i < back; ++i) {
-        free(queue[i]);
-    }
-    free(queue);
+    log_print("Initialized video.\n");
 
-    // parent is 'k', left_neighbor 'h', right neighbor 'l'
-    strcpy(node->p->hint_text,"k");
-    if (left_neighbor)
-        strcpy(left_neighbor->hint_text, "h");
-    if (right_neighbor)
-        strcpy(right_neighbor->hint_text, "l");
-    log_print("Populate end.\n");
-}
+    app.window = SDL_CreateWindow("dtree", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, windowFlags);
 
-unsigned int countTabs(char* string){
-    unsigned int num_tabs = 0;
-    for (int i=0; i<strlen(string); i++){
-        if (string[i] == '\t')
-            num_tabs++;
-        else
-            break;
+    if (!app.window) {
+        printf("Failed to open %d x %d window: %s\n", SCREEN_WIDTH, SCREEN_HEIGHT, SDL_GetError());
+        exit(1);
     }
-    return num_tabs;
-}
+    log_print("Creating renderer...\n");
+    app.renderer = SDL_CreateRenderer(app.window, -1, rendererFlags);
+    log_print("Render created.\n");
 
-void endAtNewline(char* string, int textlen){
-    for (int i = 0; i < textlen; ++i) {
-        if (string[i] == '\n') {
-            string[i] = '\0';
-            break;
-        }
+    if (!app.renderer) {
+        log_print("Failed to create renderer: %s\n", SDL_GetError());
+        exit(1);
     }
+    app.quit = 0;
+    SDL_GetWindowSize(app.window, &app.window_size.x, &app.window_size.y);
+
+    /* start SDL_ttf */
+    if(TTF_Init()==-1){
+        log_print("TTF_Init: %s\n", TTF_GetError());
+        return;
+    }
+    atexit(TTF_Quit); /* remember to quit SDL_ttf */
+    FONT = TTF_OpenFont(FONT_NAME, FONT_SIZE);
 }
 
 int main(int argc, char *argv[]) {
