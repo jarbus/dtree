@@ -17,76 +17,227 @@
 #define SCREEN_WIDTH   1280
 #define SCREEN_HEIGHT  720
 
-typedef struct Node Node;
-typedef struct Array Array;
-typedef struct Graph Graph;
+/* User Customizable Variables*/
+static const SDL_Color EDIT_COLOR =    {220, 220, 220};           // RGB
+static const SDL_Color HINT_COLOR =    {220, 0, 0};               // RGB
+static const int SELECTED_COLOR[4] =   {0, 220, 0, 0};
+static const int UNSELECTED_COLOR[4] = {0, 55, 0, 0};
+static const int CUT_COLOR[4] =        {0, 0, 220, 0};
+static const int EDGE_COLOR[4] =       {220, 220, 220, 0};
+static const int BACKGROUND_COLOR[4] = {15, 15, 15, 255};
+static const int TEXTBOX_WIDTH_SCALE = 25;                        // width of char
+static const int TEXTBOX_HEIGHT = 50;                             // height of char
+static const int FILENAME_BUFFER_MAX_SIZE = 64;
+static const int HINT_BUFFER_MAX_SIZE = 3;
+static const int MAX_TEXT_LEN = 128;                              // Max Num of chars in a node
+static const int NUM_CHARS_B4_WRAP = 20;
+// radius and thickness of node box
+static const int RADIUS = 50;
+static const int THICKNESS = 5;
+static const int FONT_SIZE = 40;
+static const char* FONT_NAME = "./assets/SourceCodePro-Regular.otf";   // Default Font name
+static const char* HINT_CHARS = "adfghjkl;\0";              // characters to use for hints
+
+
 typedef struct Point Point;
 typedef struct App App;
 typedef struct Buffer Buffer;
+typedef struct Array Array;
+typedef struct Node Node;
+typedef struct Graph Graph;
 
+// ENUMS AND DATA STRUCTURES
 enum Mode{Travel, Edit, FilenameEdit, Delete, Cut, Paste, MakeChild};
+char* getModeName(enum Mode mode_param){
+    switch(mode_param) {
+        case Edit: return "EDIT";
+        case Travel: return "TRAVEL";
+        case Delete: return "DELETE";
+        case FilenameEdit: return "FILENAME EDIT";
+        case Cut: return "CUT";
+        case Paste: return "PASTE";
+        case MakeChild: return "MAKE CHILD";
+        default: return NULL;
+    }
+}
+bool isHintMode(enum Mode mode_param){
+    switch(mode_param){
+        case Travel: return true;
+        case Delete: return true;
+        case Cut: return true;
+        case Paste: return true;
+        case MakeChild: return true;
+        default: return false;
+    }
+}
+bool isEditMode(enum Mode mode_param){
+    switch(mode_param){
+        case FilenameEdit: return true;
+        case Edit: return true;
+        default: return false;
+    }
+}
+
 struct Point {
     int x;
     int y;
 };
+
 struct App {
     SDL_Renderer *renderer;
     SDL_Window *window;
     bool quit;
     Point window_size;
 };
+
+struct Buffer {
+    char* buf;
+    int len;
+    int size;
+};
+void clearBuffer(Buffer* buffer){
+    for (int i = 0; i < buffer->len; ++i)
+        buffer->buf[i] = '\0';
+    buffer->len = 0;
+}
+
 /* dynamic array to save me some headache, code is stolen from stack overflow */
 struct Array {
     Node **array;
     size_t num;  /* number of children in array */
     size_t size; /* max size of array */
 };
-struct Buffer{
-    char* buf;
-    int len;
-    int size;
-};
+Array* initArray(size_t initialSize) {
+    Array *a;
+    a = calloc(1, sizeof(Array));
+    a->array = calloc(initialSize, sizeof(void*));
+    a->num = 0;
+    a->size = initialSize;
+    return a;
+}
+void insertArray(Array *a, void* element) {
+    // a->num is the number of used entries, because a->array[a->num++] updates a->num only *after* the array has been accessed.
+    // Therefore a->num can go up to a->size
+    if (a->num == a->size) {
+        a->size *= 2;
+        log_print("Reallocing, num %ld size %ld...\n", a->num, a->size);
+        a->array = realloc(a->array, a->size * sizeof(void*));
+        log_print("Realloced.\n");
+    }
+    a->array[a->num++] = element;
+}
+void removeFromArray(Array *a, Node* node){
+    bool start_shifting = false;
+    Node** nodes = a->array;
+    for (int i = 0; i < a->num; ++i) {
+        if ( nodes[i] == node )
+            start_shifting = true;
+        if ( start_shifting )
+            nodes[i] = nodes[i+1];
+    }
+    if (a->num > 0 && start_shifting){
+        a->array[a->num] = NULL;
+        a->num -= 1;
+    }
+}
+void* freeArray(Array *a) {
+    free(a->array);
+    a->array = NULL;
+    a->num = a->size = 0;
+    free(a);
+    return NULL;
+}
+
 struct Node {
-    struct Node* p;
-    struct Array* children;
-    struct Point pos;
+    Node* p;
+    Array* children;
+    Point pos;
     int x_offset; /* offset wrt parent; "mod" in tree drawing algos */
     int rightmost; /* greatest descendant accumulated x_off wrt node*/
     int leftmost; /* smallest (negative) acc. x_off wrt node */
-    struct Buffer text;
+    Buffer text;
     char* hint_text;
 };
+/* creates a new node at the origin */
+Node* makeNode(){
+    Node* node = malloc(sizeof(Node));
+    node->children = initArray(5);
+    node->children->num = 0;
+    node->pos.x = 0;
+    node->pos.y = 0;
+    node->text.buf = calloc(MAX_TEXT_LEN, sizeof(char));
+    node->text.size = MAX_TEXT_LEN;
+    node->text.len = 0;
+    node->hint_text = calloc(HINT_BUFFER_MAX_SIZE, sizeof(char));
+    return node;
+}
+Node* makeChild(Node* parent){
+    Node* child = makeNode();
+    child->p = parent;
+    insertArray(parent->children, child);
+    return child;
+}
+// frees all memory for the given node, as well as all its descendants
+void deleteNode(Node* node){
+    log_print("DELETEING %p\n", node);
+    /* Handle nodes that have already been deleted */
+    if ( node == NULL )
+        return;
+    /* delete each child */
+    for (int i=0; i<node->children->num; i++)
+        deleteNode( node->children->array[i] );
+
+    /* Then delete node */
+    log_print("Freeing children\n");
+    freeArray(node->children);
+    log_print("Freeing buffer\n");
+    free(node->text.buf);
+    log_print("Freeing hint_text\n");
+    free(node->hint_text);
+    free(node);
+    log_print("Deleted node %p\n", node);
+}
+// removes each node in a subtree from a given Array
+void removeSubtreeFromArray(Array* array, Node* node) {
+    if(node == NULL)
+        return;
+    removeFromArray(array, node);
+    for(int i = 0; i < node->children->num; i++) {
+        removeSubtreeFromArray(array, node->children->array[i]);
+    }
+}
+bool isInSubtree(Node* node, Node* root) {
+    if (node==NULL || root==NULL)
+        return false;
+    if (node == root)
+        return true;
+    for (int i = 0; i < root->children->num; i++) {
+        if (isInSubtree(node, root->children->array[i])) {
+            return true;
+        }
+    }
+    return false;
+}
+
 struct Graph {
     struct Node* root;
-    int num_nodes;
     Node* selected;
 };
+void makeGraph(Graph* graph){
+    graph->root = makeNode();
+    graph->selected = graph->root;
+    graph->root->p = graph->root;
+}
 
-/* User Customizable Variables*/
-static Buffer HINT_BUFFER =      {NULL, 0, 2};              // {ptr, cur_len, max_size} for hints
-static Buffer FILENAME_BUFFER =  {NULL, 0, 64};             // {ptr, cur_len, max_size} for fname
-static SDL_Color EDIT_COLOR =    {220, 220, 220};           // RGB
-static SDL_Color HINT_COLOR =    {220, 0, 0};               // RGB
-static int SELECTED_COLOR[4] =   {0, 220, 0, 0};
-static int UNSELECTED_COLOR[4] = {0, 55, 0, 0};
-static int CUT_COLOR[4] =        {0, 0, 220, 0};
-static int EDGE_COLOR[4] =       {220, 220, 220, 0};
-static int BACKGROUND_COLOR[4] = {15, 15, 15, 255};
-static int TEXTBOX_WIDTH_SCALE = 25;                        // width of char
-static int TEXTBOX_HEIGHT = 50;                            // Heigh of char
-static int MAX_TEXT_LEN = 128;                              // Max Num of chars in a node
-static int NUM_CHARS_B4_WRAP = 20;
-// radius and thickness of node box
-static int RADIUS = 50;
-static int THICKNESS = 5;
-static int FONT_SIZE = 40;
-static char* FONT_NAME = "./assets/SourceCodePro-Regular.otf";   // Default Font name
-static const char* HINT_CHARS = "adfghjkl;\0";              // characters to use for hints
 
 /* Globals */
 static App app;                 // App object that contains rendering info
 static Graph graph;             // Graph object that contains nodes
-static enum Mode mode = Travel;// Global mode
+static enum Mode mode;          // Global mode
+// {ptr, cur_len, max_size} for hints
+static Buffer HINT_BUFFER = {NULL, 0, HINT_BUFFER_MAX_SIZE};
+// {ptr, cur_len, max_size} for fname
+static Buffer FILENAME_BUFFER = {NULL, 0, FILENAME_BUFFER_MAX_SIZE};
 static TTF_Font* FONT;          // Global Font object
 static Array* HINT_NODES;       // array of all nodes to be hinted to
 static Buffer* CURRENT_BUFFER;  // buffer to store current hint progress
@@ -96,11 +247,10 @@ static char* TOGGLE_INDICATOR = "MODE PERSIST\0";
 static Node* left_neighbor = NULL; // left and right neighbors of the selected node
 static Node* right_neighbor = NULL;
 
+
 void activateHints();
 void clearHintText();
-void clearBuffer(Buffer* HINT_BUFFER);
 unsigned int countTabs(char* string);
-void deleteNode(Node* node);
 void doKeyUp(SDL_KeyboardEvent *event);
 void doKeyDown(SDL_KeyboardEvent *event);
 void drawBox(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
@@ -108,18 +258,10 @@ void drawNode(Node* node);
 void drawBorder(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
 void endAtNewline(char* string, int textlen);
 void eventHandler(SDL_Event *event);
-void* freeArray(Array *a);
-char* getModeName();
 int getWidth (char* message, bool wrap);
 int getHeight (char* message, bool wrap);
 void handleTextInput(SDL_Event *event);
-Array* initArray(size_t initialSize);
 void initSDL();
-void insertArray(Array *a, void* element);
-bool isEditMode(enum Mode mode_param);
-bool isHintMode(enum Mode mode_param);
-Node* makeNode();
-Node* makeChild(Node* parent);
 int min(int a, int b);
 int max(int a, int b);
 int get_depth(Node* node);
@@ -133,12 +275,27 @@ void populateHintText(Node* node);
 void presentScene();
 void prepareScene();
 void readfile();
-void removeFromArray(Array *a, Node* node);
-void removeNodeFromGraph(Node* node);
 void renderMessage(char* message, Point pos, double scale, SDL_Color color, bool wrap);
 void switch2(enum Mode to);
 void write2File();
 void writeChildrenStrings(FILE* file, Node* node, int level);
+
+
+// Utility function for removing a node & subtree from graph
+void removeNodeFromGraph(Node* node){
+    if ( node == graph.root ) return;
+    log_print("Removing node from graph...\n");
+    // remove node from parent's children
+    removeFromArray(node->p->children, node);
+    // remove hint memory for this node & subtree
+    removeSubtreeFromArray(HINT_NODES, node);
+    // if the currently selected node would be deleted, bubble up to the parent
+    if ( isInSubtree(graph.selected, node) )
+        graph.selected = node->p;
+    // free memory for this node and its subtree
+    deleteNode(node);
+    log_print("Removed node from graph.\n");
+}
 
 // We replace user-entered \n with | for the file format
 void replaceChar(char* arr, char find, char replace){
@@ -205,38 +362,6 @@ void write2File(){
     writeChildrenStrings(output, graph.root, 0);
     fclose(output);
 }
-
-char* getModeName(){
-    switch(mode) {
-        case Edit: return "EDIT";
-        case Travel: return "TRAVEL";
-        case Delete: return "DELETE";
-        case FilenameEdit: return "FILENAME EDIT";
-        case Cut: return "CUT";
-        case Paste: return "PASTE";
-        case MakeChild: return "MAKE CHILD";
-        default: return NULL;
-    }
-}
-
-bool isHintMode(enum Mode mode_param){
-    switch(mode_param){
-        case Travel: return true;
-        case Delete: return true;
-        case Cut: return true;
-        case Paste: return true;
-        case MakeChild: return true;
-        default: return false;
-    }
-}
-bool isEditMode(enum Mode mode_param){
-    switch(mode_param){
-        case FilenameEdit: return true;
-        case Edit: return true;
-        default: return false;
-    }
-}
-
 // When a hint node is selected, this function is run
 void hintFunction(Node* node){
     switch(mode){
@@ -763,7 +888,7 @@ void prepareScene() {
     Point mode_text_pos;
     mode_text_pos.x = (int) ((0.0) * app.window_size.x);
     mode_text_pos.y = (int) ((0.0) * app.window_size.y);
-    renderMessage(getModeName(), mode_text_pos, 1.0, EDIT_COLOR, 0);
+    renderMessage(getModeName(mode), mode_text_pos, 1.0, EDIT_COLOR, 0);
 
     //Draw hint buffer
     Point hint_buf_pos;
@@ -782,117 +907,6 @@ void prepareScene() {
 /* actually renders the screen */
 void presentScene() {
     SDL_RenderPresent(app.renderer);
-}
-
-Array* initArray(size_t initialSize) {
-    Array *a;
-    a = calloc(1, sizeof(Array));
-    a->array = calloc(initialSize, sizeof(void*));
-    a->num = 0;
-    a->size = initialSize;
-    return a;
-}
-
-void insertArray(Array *a, void* element) {
-    // a->num is the number of used entries, because a->array[a->num++] updates a->num only *after* the array has been accessed.
-    // Therefore a->num can go up to a->size
-    if (a->num == a->size) {
-        a->size *= 2;
-        log_print("Reallocing, num %ld size %ld...\n", a->num, a->size);
-        a->array = realloc(a->array, a->size * sizeof(void*));
-        log_print("Realloced.\n");
-    }
-    a->array[a->num++] = element;
-}
-void removeFromArray(Array *a, Node* node){
-    bool start_shifting = false;
-    Node** nodes = a->array;
-    for (int i = 0; i < a->num; ++i) {
-        if ( nodes[i] == node )
-            start_shifting = true;
-        if ( start_shifting )
-            nodes[i] = nodes[i+1];
-    }
-    if (a->num > 0 && start_shifting){
-        a->array[a->num] = NULL;
-        a->num -= 1;
-    }
-}
-
-void* freeArray(Array *a) {
-    free(a->array);
-    a->array = NULL;
-    a->num = a->size = 0;
-    free(a);
-    return NULL;
-}
-
-void clearBuffer(Buffer* buffer){
-    for (int i = 0; i < buffer->len; ++i)
-        buffer->buf[i] = '\0';
-    buffer->len = 0;
-}
-
-/* creates a new node at the origin */
-Node* makeNode(){
-    Node* node = malloc(sizeof(Node));
-    node->children = initArray(5);
-    node->children->num = 0;
-    node->pos.x = 0;
-    node->pos.y = 0;
-    node->text.buf = calloc(MAX_TEXT_LEN, sizeof(char));
-    node->text.size = MAX_TEXT_LEN;
-    node->text.len = 0;
-    node->hint_text = calloc(HINT_BUFFER.size, sizeof(char));
-    return node;
-}
-
-Node* makeChild(Node* parent){
-    Node* child = makeNode();
-    child->p = parent;
-    insertArray(parent->children, child);
-    calculate_positions(graph.root, graph.selected);
-    return child;
-}
-
-void deleteNode(Node* node){
-    log_print("DELETEING %p\n", node);
-    /* Handle nodes that have already been deleted */
-    if ( node == NULL )
-        return;
-    /* delete each child */
-    for (int i=0; i<node->children->num; i++)
-        removeNodeFromGraph( node->children->array[i] );
-
-    /* Then delete node */
-    log_print("Freeing children\n");
-    freeArray(node->children);
-    log_print("Freeing buffer\n");
-    free(node->text.buf);
-    log_print("Freeing hint_text\n");
-    free(node->hint_text);
-    free(node);
-    log_print("Deleted node %p\n", node);
-}
-
-void removeNodeFromGraph(Node* node){
-    if ( node == graph.root ) return;
-    log_print("Removing node from graph...\n");
-    // remove node from array
-    removeFromArray(node->p->children, node);
-    removeFromArray(HINT_NODES, node);
-    if ( node == graph.selected )
-        graph.selected = node->p;
-    deleteNode(node);
-    log_print("Removed node from graph.\n");
-}
-
-void makeGraph(){
-    graph.root = makeNode();
-    graph.num_nodes = 0;
-    graph.selected = graph.root;
-    graph.root->p = graph.root;
-    switch2(Travel);
 }
 
 void clearHintText() {
@@ -1008,7 +1022,7 @@ int main(int argc, char *argv[]) {
     /* set up window, screen, and renderer */
     initSDL();
 
-    makeGraph();
+    makeGraph(&graph);
 
     FILENAME_BUFFER.buf = calloc(FILENAME_BUFFER.size, sizeof(char));
     if ( argc > 1 )
