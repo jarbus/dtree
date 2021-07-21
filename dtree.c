@@ -444,10 +444,10 @@ void calculateNeighbors(Node* root, Node* selected) {
        return;
 
     //                     buffer overflow waiting to happen
-    //                     VVVV 
-    Node** queue =  calloc(8192, sizeof(Node*)); 
-    int* node_depths =  calloc(8192, sizeof(int)); 
-    
+    //                     VVVV
+    Node** queue =  calloc(8192, sizeof(Node*));
+    int* node_depths =  calloc(8192, sizeof(int));
+
     queue[0] = root;
     int index = 0;
     int queue_len = 1;
@@ -644,7 +644,7 @@ void handleTextInput(SDL_Event *event){
             logPrint("Freeing hint buffer\n");
             clearBuffer(&HINT_BUFFER);
             logPrint("Freed hint buffer\n");
-             
+
             logPrint("Re-calculating positions of nodes...\n");
             calculatePositions(GRAPH.root, GRAPH.selected);
             logPrint("Populating hint text...\n");

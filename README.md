@@ -1,19 +1,17 @@
 # dtree
-A minimal decision tree planning app
 
-# Requirements
+A keyboard-driven decision tree editor, for visually exploring spaces of ideas, possible sequences of events, and so much more.
 
-* SDL2
-* SDL2_ttf
-* make
-* gcc
+![](./demo.gif)
 
-# Usage
+## Usage
+
 The application provides 6 modes of interaction with the decision tree- `Travel`, `MakeChild`, `Edit`, `Delete`, `Cut`, `Paste`.
 
 In Travel Mode:
 
 * `e` : switch to Edit mode
+* `t` : switch to Travel mode
 * `s` : clear the selected text, then switch to edit mode
 * `o` : activate MakeChild mode for one node
 * `x` : activate Delete mode for one node
@@ -32,7 +30,7 @@ In Edit Mode:
 
 ## Hint Keys and Hint Modes
 
-Some modes allow you to select nodes by entering their corresponding red characters. These characters are called "Hint Keys" and modes that use hint keys to select nodes are called "Hint Modes".
+Some modes allow you to select nodes by entering their corresponding red characters. These characters are called "Hint Keys" and modes that use hint keys to select nodes are called "Hint Modes". The characters `h`, `l`, and `k` always refer to the left node, right node, and parent node of the currently selected node, respectively.
 
 In Travel Mode:
 
@@ -54,12 +52,20 @@ In Paste Mode:
 
 * select a new parent for the cut node
 
-# Roadmap
+## Requirements
 
-* fix issues with root not rendering children that are too far down
-* fix quit error message after deleting certain nodes
-* Add a FILE-OPEN key: a node buffer will be a file name, and pressing a key on the node opens it in users' preferred app
-* Scaling the graph to zoom in or out
-* Add cursor for buffers so users can use arrow keys to edit specific parts of text
-* Add copy, paste functionality for buffers
-* Ensure hints are clearly separated from one another
+* SDL2
+* SDL2_ttf
+* make
+* gcc
+
+## Installation
+
+On Arch Linux:
+
+```
+pacman -S sdl2 sdl2_ttf
+git clone https://github.com/jarbus/dtree
+cd dtree
+make
+```
