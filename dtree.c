@@ -1054,6 +1054,7 @@ int main(int argc, char *argv[]) {
     HINT_BUFFER.buf = calloc(HINT_BUFFER.size + 1, sizeof(char));
 
     readFile();
+    calculatePositions(GRAPH.root,GRAPH.selected);
     switchMode(Travel);
     /* gracefully close windows on exit of program */
     atexit(SDL_Quit);
