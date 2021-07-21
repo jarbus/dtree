@@ -62,18 +62,13 @@ char* getModeName(enum Mode mode_param){
 }
 bool isHintMode(enum Mode mode_param){
     switch(mode_param){
-        case Travel:
-        case Delete:
-        case Cut:
-        case Paste:
-        case MakeChild: return true;
+        case Travel: case Delete: case Cut: case Paste: case MakeChild: return true;
         default: return false;
     }
 }
 bool isEditMode(enum Mode mode_param){
     switch(mode_param){
-        case FilenameEdit:
-        case Edit: return true;
+        case FilenameEdit: case Edit: return true;
         default: return false;
     }
 }
@@ -203,20 +198,17 @@ void removeSubtreeFromArray(Array* array, Node* node) {
     if(node == NULL)
         return;
     removeFromArray(array, node);
-    for(int i = 0; i < node->children->num; i++) {
+    for(int i = 0; i < node->children->num; i++)
         removeSubtreeFromArray(array, node->children->array[i]);
-    }
 }
 bool isInSubtree(Node* node, Node* root) {
     if (node==NULL || root==NULL)
         return false;
     if (node == root)
         return true;
-    for (int i = 0; i < root->children->num; i++) {
-        if (isInSubtree(node, root->children->array[i])) {
+    for (int i = 0; i < root->children->num; i++)
+        if (isInSubtree(node, root->children->array[i]))
             return true;
-        }
-    }
     return false;
 }
 
@@ -543,16 +535,9 @@ void switchMode(enum Mode to){
         clearBuffer(&HINT_BUFFER);
     }
     switch ( to ){
-        case Edit:
-            CURRENT_BUFFER = &GRAPH.selected->text;
-            break;
-        case FilenameEdit:
-            CURRENT_BUFFER = &FILENAME_BUFFER;
-            to = Edit;
-            break;
-        case Travel:
-            TOGGLE_MODE = false;
-            break;
+        case Edit: CURRENT_BUFFER = &GRAPH.selected->text; break;
+        case FilenameEdit: CURRENT_BUFFER = &FILENAME_BUFFER; to = Edit; break;
+        case Travel: TOGGLE_MODE = false; break;
     }
     MODE = to;
     if ( isHintMode(to) )
@@ -562,20 +547,10 @@ void switchMode(enum Mode to){
 // When a hint node is selected, this function is run
 void hintFunction(Node* node){
     switch(MODE){
-        case Travel:
-            GRAPH.selected = node;
-            break;
-        case Delete:
-            removeNodeFromGraph(node);
-            break;
-        case Cut:
-            CUT = node;
-            switchMode(Paste);
-            break;
-        case MakeChild:
-            makeChild(node);
-            activateHints();
-            break;
+        case Travel: GRAPH.selected = node; break;
+        case Delete: removeNodeFromGraph(node); break;
+        case Cut: CUT = node; switchMode(Paste); break;
+        case MakeChild: makeChild(node); activateHints(); break;
         case Paste:
             if ( !CUT ) break;
             removeFromArray(CUT->p->children, CUT);
@@ -666,37 +641,16 @@ void doKeyUp(SDL_KeyboardEvent *event) {
     switch(MODE) {
         case Travel:
             switch(event->keysym.sym) {
-                case SDLK_o:
-                    switchMode(MakeChild);
-                    return;
-                case SDLK_e:
-                    switchMode(Edit);
-                    return;
-                case SDLK_r:
-                    switchMode(FilenameEdit);
-                    return;
-                case SDLK_x:
-                    switchMode(Delete);
-                    return;
-                case SDLK_m:
-                    switchMode(Cut);
-                    return;
-                case SDLK_p:
-                    switchMode(Paste);
-                    return;
-                case SDLK_s:
-                    clearBuffer(&GRAPH.selected->text);
-                    switchMode(Edit);
-                    return;
-                case SDLK_c:
-                    TOGGLE_MODE = true;
-                    return;
-                case SDLK_w:
-                    writeFile();
-                    return;
-                case SDLK_q:
-                    APP.quit = true;
-                    return;
+                case SDLK_o: switchMode(MakeChild); return;
+                case SDLK_e: switchMode(Edit); return;
+                case SDLK_r: switchMode(FilenameEdit); return;
+                case SDLK_x: switchMode(Delete); return;
+                case SDLK_m: switchMode(Cut); return;
+                case SDLK_p: switchMode(Paste); return;
+                case SDLK_s: clearBuffer(&GRAPH.selected->text); switchMode(Edit); return;
+                case SDLK_c: TOGGLE_MODE = true; return;
+                case SDLK_w: writeFile(); return;
+                case SDLK_q: APP.quit = true; return;
             }
             break; // end of Travel bindings
         case Edit:
@@ -719,18 +673,10 @@ void doKeyUp(SDL_KeyboardEvent *event) {
 
 void eventHandler(SDL_Event *event) {
     switch (event->type){
-        case SDL_TEXTINPUT:
-            handleTextInput(event);
-            break;
-        case SDL_KEYDOWN:
-            doKeyDown(&event->key);
-            break;
-        case SDL_KEYUP:
-            doKeyUp(&event->key);
-            break;
-        case SDL_QUIT:
-            exit(0);
-            break;
+        case SDL_TEXTINPUT: handleTextInput(event); break;
+        case SDL_KEYDOWN: doKeyDown(&event->key); break;
+        case SDL_KEYUP: doKeyUp(&event->key); break;
+        case SDL_QUIT: exit(0); break;
         case SDL_WINDOWEVENT:
             if(event->window.event == SDL_WINDOWEVENT_RESIZED)
                 SDL_GetWindowSize(APP.window, &APP.window_size.x, &APP.window_size.y);
