@@ -240,6 +240,49 @@ static char* TOGGLE_INDICATOR = "MODE PERSIST\0";
 static Node* LEFT_NEIGHBOR = NULL; // left and right neighbors of the selected node
 static Node* RIGHT_NEIGHBOR = NULL;
 
+// GENERAL UTIL FUNCTIONS
+void removeNodeFromGraph(Node* node);
+int min(int a, int b);
+int max(int a, int b);
+int getWidth (char* message, bool wrap);
+int getHeight (char* message, bool wrap);
+// READ/WRITE
+void replaceChar(char* arr, char find, char replace);
+unsigned int countTabs(char* string);
+void endAtNewline(char* string, int text_len);
+void readFile();
+void writeChildrenStrings(FILE* file, Node* node, int level);
+void writeFile();
+// HINT MANAGEMENT
+void calculateNeighbors(Node* root, Node* selected);
+void clearHintText();
+void populateHintNodes(Node* node);
+void populateHintText(Node* node);
+// EVENT HANDLING
+void activateHints();
+void switchMode(enum Mode to);
+void hintFunction(Node* node);
+void handleTextInput(SDL_Event *event);
+void doKeyDown(SDL_KeyboardEvent *event);
+void doKeyUp(SDL_KeyboardEvent *event);
+void eventHandler(SDL_Event *event);
+// POSITION CALCULATION ALGORITHM
+int getDepth(Node* node);
+void calculateOffsets(Node* node);
+void calculateMaxHeights(Node* node, int level, int* max_heights);
+void applyOffsets(Node* node, int x_offset, int level, int* y_levels);
+void centerOnSelected(Node* node, int selected_x, int selected_y);
+void calculatePositions(Node* root, Node* selected);
+void recursivelyPrintPositions(Node* node, int level);
+// RENDERING
+void renderMessage(char* message, Point pos, double scale, SDL_Color color, bool wrap);
+void drawBox(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int offset, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
+void drawBorder(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
+void drawNode(Node* node);
+void prepareScene();
+void presentScene();
+// INIT
+void initSDL();
 
 // GENERAL UTIL FUNCTIONS
 
@@ -565,9 +608,6 @@ void hintFunction(Node* node){
     if ( TOGGLE_MODE == false && MODE != Paste )
         switchMode( Travel );
 }
-
-// temporary hack
-void calculatePositions(Node*, Node*);
 
 void handleTextInput(SDL_Event *event){
     if ( CURRENT_BUFFER && CURRENT_BUFFER->len < CURRENT_BUFFER->size ){
