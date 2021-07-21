@@ -581,6 +581,7 @@ void switchMode(enum Mode to){
         case Edit: CURRENT_BUFFER = &GRAPH.selected->text; break;
         case FilenameEdit: CURRENT_BUFFER = &FILENAME_BUFFER; to = Edit; break;
         case Travel: TOGGLE_MODE = false; break;
+        default: break;
     }
     MODE = to;
     if ( isHintMode(to) )
