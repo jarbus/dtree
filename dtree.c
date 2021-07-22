@@ -254,7 +254,9 @@ void readFile();
 void writeChildrenStrings(FILE* file, Node* node, int level);
 void writeFile();
 // HINT MANAGEMENT
-void calculateNeighbors(Node* root, Node* selected);
+Node* calculateLeftNeighbor(Node* cur);
+Node* calculateRightNeighbor(Node* cur);
+void calculateNeighbors();
 void clearHintText();
 void populateHintNodes(Node* node);
 void populateHintText(Node* node);
@@ -437,44 +439,42 @@ void writeFile(){
 
 // HINT MANAGEMENT
 
-void calculateNeighbors(Node* root, Node* selected) {
-    LEFT_NEIGHBOR = NULL;
-    RIGHT_NEIGHBOR = NULL;
-    if (selected == root)
-       return;
+// helper function for calculateNeighbors
+// the right neighbor of a node is the immediate node to the right of the current node
+// this is either a right sibling, or the leftmost child of the parent node's right sibling
+Node* calculateRightNeighbor(Node* cur) {
+    if(cur == GRAPH.root || cur == NULL)
+        return NULL;
+    Node* parent = cur->p; 
+    // check for right sibling
+    for(int i = 0; i < parent->children->num; i++)
+        if (parent->children->array[i] == cur && i < parent->children->num-1)
+            return parent->children->array[i+1];
+    // take leftmost child of parent's right neighbor
+    Node* rightParent = calculateRightNeighbor(parent);
+    if (rightParent == NULL || rightParent->children->num == 0)
+        return NULL;
+    return rightParent->children->array[0];
+}
+// symmetric algorithm for left neighbor
+Node* calculateLeftNeighbor(Node* cur) {
+    if(cur == GRAPH.root || cur == NULL)
+        return NULL;
+    Node* parent = cur->p; 
+    // check for left sibling
+    for(int i = 0; i < parent->children->num; i++)
+        if (parent->children->array[i] == cur && i != 0)
+            return parent->children->array[i-1];
+    // take rightmost child of parent's left neighbor
+    Node* leftParent = calculateLeftNeighbor(parent);
+    if (leftParent == NULL || leftParent->children->num == 0)
+        return NULL;
+    return leftParent->children->array[leftParent->children->num-1];
+}
 
-    //                     buffer overflow waiting to happen
-    //                     VVVV
-    Node** queue =  calloc(8192, sizeof(Node*));
-    int* node_depths =  calloc(8192, sizeof(int));
-
-    queue[0] = root;
-    int index = 0;
-    int queue_len = 1;
-    bool found = false;
-
-    while ( index != queue_len ) {
-        Node* cur = queue[index];
-        if (index > 0 && queue[index] == selected) {
-            found = true;
-            break;
-        }
-        // add children to the queue
-        for(int i = 0; i < cur->children->num; i++) {
-            queue[queue_len] = cur->children->array[i];
-            node_depths[queue_len] = node_depths[index]+1;
-            queue_len++;
-        }
-        index++;
-    }
-    if (found) {
-        if(node_depths[index] == node_depths[index-1])
-            LEFT_NEIGHBOR = queue[index-1];
-        if(node_depths[index] == node_depths[index+1])
-            RIGHT_NEIGHBOR = queue[index+1];
-    }
-    free(queue);
-    free(node_depths);
+void calculateNeighbors() {
+    LEFT_NEIGHBOR = calculateLeftNeighbor(GRAPH.selected);
+    RIGHT_NEIGHBOR = calculateRightNeighbor(GRAPH.selected);
 }
 
 void clearHintText() {
