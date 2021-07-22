@@ -254,8 +254,7 @@ void readFile();
 void writeChildrenStrings(FILE* file, Node* node, int level);
 void writeFile();
 // HINT MANAGEMENT
-Node* calculateLeftNeighbor(Node* cur);
-Node* calculateRightNeighbor(Node* cur);
+Node* calculateNeighbor(Node* cur, bool isLeft);
 void calculateNeighbors();
 void clearHintText();
 void populateHintNodes(Node* node);
@@ -440,41 +439,34 @@ void writeFile(){
 // HINT MANAGEMENT
 
 // helper function for calculateNeighbors
-// the right neighbor of a node is the immediate node to the right of the current node
-// this is either a right sibling, or the leftmost child of the parent node's right sibling
-Node* calculateRightNeighbor(Node* cur) {
+// the left neighbor of a node is the immediate node to the left of the current node
+// this is either a left sibling, or the rightmost child of the parent node's left sibling
+// symmetric algorithm for right neighbor
+Node* calculateNeighbor(Node* cur, bool isLeft) {
     if(cur == GRAPH.root || cur == NULL)
         return NULL;
     Node* parent = cur->p; 
-    // check for right sibling
-    for(int i = 0; i < parent->children->num; i++)
-        if (parent->children->array[i] == cur && i < parent->children->num-1)
-            return parent->children->array[i+1];
-    // take leftmost child of parent's right neighbor
-    Node* rightParent = calculateRightNeighbor(parent);
-    if (rightParent == NULL || rightParent->children->num == 0)
-        return NULL;
-    return rightParent->children->array[0];
-}
-// symmetric algorithm for left neighbor
-Node* calculateLeftNeighbor(Node* cur) {
-    if(cur == GRAPH.root || cur == NULL)
-        return NULL;
-    Node* parent = cur->p; 
-    // check for left sibling
-    for(int i = 0; i < parent->children->num; i++)
-        if (parent->children->array[i] == cur && i != 0)
+    // check for left/right sibling
+    for(int i = 0; i < parent->children->num; i++) {
+        if (isLeft && parent->children->array[i] == cur && i != 0)
             return parent->children->array[i-1];
-    // take rightmost child of parent's left neighbor
-    Node* leftParent = calculateLeftNeighbor(parent);
-    if (leftParent == NULL || leftParent->children->num == 0)
+        if (!isLeft && parent->children->array[i] == cur && i < parent->children->num-1)
+            return parent->children->array[i+1];
+    }
+    // take rightmost/leftmost child of parent's left/right neighbor
+    Node* parentNeighbor = calculateNeighbor(parent, isLeft);
+    if (parentNeighbor == NULL || parentNeighbor->children->num == 0)
         return NULL;
-    return leftParent->children->array[leftParent->children->num-1];
+    // rightmost child of parent's left neighbor
+    if (isLeft)
+        return parentNeighbor->children->array[parentNeighbor->children->num-1];
+    // leftmost child of parent's right neighbor
+    return parentNeighbor->children->array[0];
 }
 
 void calculateNeighbors() {
-    LEFT_NEIGHBOR = calculateLeftNeighbor(GRAPH.selected);
-    RIGHT_NEIGHBOR = calculateRightNeighbor(GRAPH.selected);
+    LEFT_NEIGHBOR = calculateNeighbor(GRAPH.selected, true);
+    RIGHT_NEIGHBOR = calculateNeighbor(GRAPH.selected, false);
 }
 
 void clearHintText() {
