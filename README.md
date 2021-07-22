@@ -2,7 +2,7 @@
 
 A keyboard-driven decision tree editor, for visually exploring spaces of ideas, possible sequences of events, and so much more.
 
-![](./demo.gif)
+![](./demo.webm)
 
 ## Usage
 
