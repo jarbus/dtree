@@ -440,9 +440,11 @@ void writeFile(){
 // HINT MANAGEMENT
 
 // helper function for calculateNeighbors
-// the left neighbor of a node is the immediate node to the left of the current node
-// this is either a left sibling, or the rightmost child of the parent node's left sibling
-// symmetric algorithm for right neighbor
+// the left neighbor of a node is
+//   the first node to the left of the current node on the same level
+// this is either a left sibling, or the first rightmost child of some node
+// in the chain of left neighbors of the parent node.
+// The algorithm is symmetric for finding the right neighbor
 Node* calculateNeighbor(Node* cur, bool isLeft) {
     if(cur == GRAPH.root || cur == NULL)
         return NULL;
@@ -454,14 +456,19 @@ Node* calculateNeighbor(Node* cur, bool isLeft) {
         if (!isLeft && parent->children->array[i] == cur && i < parent->children->num-1)
             return parent->children->array[i+1];
     }
-    // take rightmost/leftmost child of parent's left/right neighbor
+    // go up a level, and find the first node in the chain of neighbors with a child
     Node* parentNeighbor = calculateNeighbor(parent, isLeft);
-    if (parentNeighbor == NULL || parentNeighbor->children->num == 0)
+    if (parentNeighbor == NULL)
         return NULL;
-    // rightmost child of parent's left neighbor
+    while(parentNeighbor->children->num == 0) {
+        parentNeighbor = calculateNeighbor(parentNeighbor, isLeft);
+        if (parentNeighbor == NULL)
+            return NULL;
+    }
+    // left neighbor is rightmost child of upper-level node
     if (isLeft)
         return parentNeighbor->children->array[parentNeighbor->children->num-1];
-    // leftmost child of parent's right neighbor
+    // right neighbor is leftmost child of upper-level node
     return parentNeighbor->children->array[0];
 }
 
