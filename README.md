@@ -1,6 +1,6 @@
 # dtree
 
-A keyboard-driven decision tree editor, for visually exploring spaces of ideas, possible sequences of events, and so much more.
+A keyboard-driven decision tree editor, for visually exploring spaces of ideas, possible sequences of events, and so much more. [Demo](https://imgur.com/7YwDnxc)
 
 ![](./screenshot.png)
 
@@ -65,6 +65,15 @@ On Arch Linux:
 
 ```
 pacman -S sdl2 sdl2_ttf
+git clone https://github.com/jarbus/dtree
+cd dtree
+make
+```
+
+On Ubuntu
+
+```
+apt install libsdl2-ttf-dev
 git clone https://github.com/jarbus/dtree
 cd dtree
 make
