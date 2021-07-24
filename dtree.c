@@ -519,6 +519,8 @@ void populateHintText(Node* node){
     calculateNeighbors(GRAPH.root, GRAPH.selected);
     clearHintText();
     HINT_NODES = initArray(10);
+    if(LEFT_NEIGHBOR) insertArray(HINT_NODES, LEFT_NEIGHBOR); 
+    if(RIGHT_NEIGHBOR) insertArray(HINT_NODES, RIGHT_NEIGHBOR);
     populateHintNodes(GRAPH.root);
     logPrint("Cleared\n");
     logPrint("%p: %s\n",node->p->hint_text, node->p->hint_text);
