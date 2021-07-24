@@ -239,6 +239,7 @@ static bool TOGGLE_MODE = false;
 static char* TOGGLE_INDICATOR = "MODE PERSIST\0";
 static Node* LEFT_NEIGHBOR = NULL; // left and right neighbors of the selected node
 static Node* RIGHT_NEIGHBOR = NULL;
+static int OFFSCREEN_PADDING = 500;
 
 // GENERAL UTIL FUNCTIONS
 void removeNodeFromGraph(Node* node);
@@ -894,6 +895,15 @@ void drawBorder(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, 
         drawBox(surface, n_cx , n_cy, len, height, i, r, g, b, a);
 }
 
+bool is_visible(Node* node){
+    if (node->pos.x < -OFFSCREEN_PADDING ||
+        node->pos.x > APP.window_size.x + OFFSCREEN_PADDING ||
+        node->pos.y < -OFFSCREEN_PADDING ||
+        node->pos.y > APP.window_size.y + OFFSCREEN_PADDING )
+        return false;
+    return true;
+}
+
 /* Renders each node, then renders it's children and draws lines to the children */
 void drawNode(Node* node) {
     if ( node == NULL ) return;
@@ -905,42 +915,46 @@ void drawNode(Node* node) {
     /* draw red ring for unselected nodes, green for selected */
     int width  = getWidth(node->text.buf, 1);
     int height = getHeight(node->text.buf, 1);
-    if (node == CUT)
-        drawBorder(APP.renderer, x, y, width, height, THICKNESS, CUT_COLOR[0], CUT_COLOR[1], CUT_COLOR[2], CUT_COLOR[3]);
-    else if (node == GRAPH.selected)
-        drawBorder(APP.renderer, x, y, width, height, THICKNESS, SELECTED_COLOR[0], SELECTED_COLOR[1], SELECTED_COLOR[2], SELECTED_COLOR[3]);
-    else
-        drawBorder(APP.renderer, x, y, width, height, THICKNESS, UNSELECTED_COLOR[0], UNSELECTED_COLOR[1], UNSELECTED_COLOR[2], UNSELECTED_COLOR[3]);
+    if ( is_visible(node) ){
+        if (node == CUT)
+            drawBorder(APP.renderer, x, y, width, height, THICKNESS, CUT_COLOR[0], CUT_COLOR[1], CUT_COLOR[2], CUT_COLOR[3]);
+        else if (node == GRAPH.selected)
+            drawBorder(APP.renderer, x, y, width, height, THICKNESS, SELECTED_COLOR[0], SELECTED_COLOR[1], SELECTED_COLOR[2], SELECTED_COLOR[3]);
+        else
+            drawBorder(APP.renderer, x, y, width, height, THICKNESS, UNSELECTED_COLOR[0], UNSELECTED_COLOR[1], UNSELECTED_COLOR[2], UNSELECTED_COLOR[3]);
+    }
 
     /* draw edges between parent and child nodes */
-    if (node != GRAPH.root){
+    if (node != GRAPH.root && (is_visible(node->p) || is_visible(node)) ){
         SDL_SetRenderDrawColor(APP.renderer, EDGE_COLOR[0], EDGE_COLOR[1], EDGE_COLOR[2], EDGE_COLOR[3]);
         SDL_RenderDrawLine(APP.renderer, x, y - (height/2), node->p->pos.x, node->p->pos.y + (getHeight(node->p->text.buf, 1) / 2));
     }
 
-    Point message_pos;
-    message_pos.x = x - (width / 2);
-    message_pos.y = y - (height / 2);
+    if ( is_visible(node) ){
+        Point message_pos;
+        message_pos.x = x - (width / 2);
+        message_pos.y = y - (height / 2);
 
-    /* render node text */
-    renderMessage(node->text.buf, message_pos, 1.0, EDIT_COLOR, 1);
-    /* render hint text */
-    if ( isHintMode(MODE) && strlen(node->hint_text) > 0 ){
-        // dont render hint text that doesn't match hint buffer
-        bool render_hint = true;
-        if (HINT_BUFFER.len > 0){
-            for (int i = 0; i < HINT_BUFFER.len; ++i) {
-                if ( HINT_BUFFER.buf[i] != node->hint_text[i] ){
-                    render_hint = false;
-                    break;
+        /* render node text */
+        renderMessage(node->text.buf, message_pos, 1.0, EDIT_COLOR, 1);
+        /* render hint text */
+        if ( isHintMode(MODE) && strlen(node->hint_text) > 0 ){
+            // dont render hint text that doesn't match hint buffer
+            bool render_hint = true;
+            if (HINT_BUFFER.len > 0){
+                for (int i = 0; i < HINT_BUFFER.len; ++i) {
+                    if ( HINT_BUFFER.buf[i] != node->hint_text[i] ){
+                        render_hint = false;
+                        break;
+                    }
                 }
             }
-        }
-        // position char in center of node
-        if ( render_hint ) {
-            message_pos.x = x  - (int)(width / 2) - THICKNESS;
-            message_pos.y = y  - (int)(height / 2) - THICKNESS - RADIUS;
-            renderMessage(node->hint_text, message_pos, 0.75, HINT_COLOR, 0);
+            // position char in center of node
+            if ( render_hint ) {
+                message_pos.x = x  - (int)(width / 2) - THICKNESS;
+                message_pos.y = y  - (int)(height / 2) - THICKNESS - RADIUS;
+                renderMessage(node->hint_text, message_pos, 0.75, HINT_COLOR, 0);
+            }
         }
     }
 
