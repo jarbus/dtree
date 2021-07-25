@@ -25,16 +25,18 @@ static const int UNSELECTED_COLOR[4] = {0, 55, 0, 0};
 static const int CUT_COLOR[4] =        {0, 0, 220, 0};
 static const int EDGE_COLOR[4] =       {220, 220, 220, 0};
 static const int BACKGROUND_COLOR[4] = {15, 15, 15, 255};
-static const int TEXTBOX_WIDTH_SCALE = 25;                        // width of char
-static const int TEXTBOX_HEIGHT = 50;                             // height of char
+static int TEXTBOX_WIDTH_SCALE = 25;                        // width of char
+static int TEXTBOX_HEIGHT = 50;                             // height of char
+static double UI_SCALE = 1.0;
+static double GRAPH_SCALE = 1.0;
 static const int FILENAME_BUFFER_MAX_SIZE = 64;
 static const int HINT_BUFFER_MAX_SIZE = 3;
 static const int MAX_TEXT_LEN = 128;                              // Max Num of chars in a node
-static const int NUM_CHARS_B4_WRAP = 20;
+static int NUM_CHARS_B4_WRAP = 20;
 // radius and thickness of node box
 static const int RADIUS = 50;
 static const int THICKNESS = 5;
-static const int FONT_SIZE = 40;
+static int FONT_SIZE = 40;
 static const char* FONT_NAME = "./assets/SourceCodePro-Regular.otf";   // Default Font name
 static const char* HINT_CHARS = "adfghkl;\0";              // characters to use for hints
 
@@ -286,6 +288,8 @@ void renderMessage(char* message, Point pos, double scale, SDL_Color color, bool
 void drawBox(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int offset, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
 void drawBorder(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
 void drawNode(Node* node);
+char** getLines(char* message, int wrap);
+char* getEndOfLine(char* line_start, int wrap);
 void prepareScene();
 void presentScene();
 // INIT
@@ -312,27 +316,33 @@ void removeNodeFromGraph(Node* node){
 int min(int a, int b){ if (a < b ) return a; else return b; }
 int max(int a, int b){ if (a > b ) return a; else return b; }
 
-// return graphical width of text (with or without text wrapping)
 int getWidth (char* message, bool wrap){
-    int ret;
-    if ( wrap ){
-        for (int i = 0; i < strlen(message); ++i) {
-            if ( i > 0 && message[i-1] == '\n' ){
-                return NUM_CHARS_B4_WRAP * TEXTBOX_WIDTH_SCALE;
-            }
-        }
-        ret = min( strlen(message), NUM_CHARS_B4_WRAP) * TEXTBOX_WIDTH_SCALE;
+    int cur_line = 0;
+    char* tok = message;
+
+    int max_width = 0;
+    while ( tok ) {
+        char* line_end = getEndOfLine(tok, wrap);
+        logPrint("back in loop\n");
+        if ( !line_end ){logPrint("breaking\n"); break;}
+        int line_len = ( line_end - tok );
+        printf("line len %d\n", line_len);
+        max_width = max(line_len, max_width);
+        // copy all chars up until line_end
+        tok = line_end;
+        if ( *line_end == ' ' ) tok = line_end+1;
+        cur_line++;
     }
-    else
-        ret = strlen(message) * TEXTBOX_WIDTH_SCALE;
-    return ret;
+    return max_width * TEXTBOX_WIDTH_SCALE;
 }
+
+
 // return graphical height of text (with or without text wrapping)
 int getHeight (char* message, bool wrap){
     if ( wrap ){
         int num_lines=1, chars_since_line_start=0, chars_since_last_space=0;
         for (int i = 0; i < strlen(message); ++i) {
-            if ( chars_since_line_start >= NUM_CHARS_B4_WRAP && message[i] != ' ' && message[i] != '\n' ) {
+            if ( chars_since_line_start >= NUM_CHARS_B4_WRAP && message[i] != ' ' && message[i] != '\n' && !(i == strlen(message) - 1) ) {
                 chars_since_line_start = chars_since_last_space -1;
                 num_lines++;
             }
@@ -352,6 +362,59 @@ int getHeight (char* message, bool wrap){
         return TEXTBOX_HEIGHT;
 }
 
+
+char* getEndOfLine(char* line_start, int wrap){
+    if ( !*line_start ) return NULL;
+    logPrint("getEndOfLine()\n");
+    char* last_space = line_start;
+    char* cur_char = line_start;
+    int num_chars = 0;
+    while ( *cur_char ){
+        /* return NULL at end of string */
+        if ( *cur_char == '\0' ) return cur_char;
+        if ( *cur_char == '\n' ) return cur_char + 1;
+        /* if we are past a line length, return the last new space */
+        if ( wrap ){
+            if ( *cur_char == ' ' )  last_space = cur_char;
+            if ( num_chars > NUM_CHARS_B4_WRAP && last_space != line_start) return last_space;
+        }
+
+        cur_char ++;
+        num_chars++;
+    }
+    return cur_char;
+}
+
+
+/* string -> strings representing the wrapped string */
+char** getLines(char* message, int wrap){
+
+    logPrint("getLines()\n");
+    int height = getHeight(message, wrap);
+    int cur_line = 0;
+    char** lines = calloc(height/TEXTBOX_HEIGHT + 1, sizeof(char*));
+    char* tok = message;
+    char* line_end;
+
+    while ( tok ) {
+        line_end = getEndOfLine(tok, wrap);
+        if ( !line_end ) break;
+        int line_len = ( line_end - tok );
+        logPrint("line len: %p - %p=%d\n", line_end, tok, line_len);
+        lines[cur_line] = calloc(line_len + 1, sizeof(char));
+        // copy all chars up until line_end
+        for (int i = 0; i < line_len; i++) {
+            if ( i != line_len - 1 || *(tok+i) != '\n')
+                *(lines[cur_line]+i) = *(tok+i);
+        }
+        tok = line_end;
+        if ( *line_end == ' ' ) tok = line_end+1;
+        cur_line++;
+    }
+    logPrint("returning after making %d lines\n", cur_line);
+    lines[cur_line] = NULL;
+    return lines;
+}
 
 // READ/WRITE
 
@@ -660,14 +723,19 @@ void handleTextInput(SDL_Event *event){
 }
 
 void doKeyDown(SDL_KeyboardEvent *event) {
-    if ( isEditMode(MODE) ){
-        switch(event->keysym.sym) {
-            case SDLK_BACKSPACE:
-                if ( CURRENT_BUFFER && CURRENT_BUFFER->len > 0)
-                    CURRENT_BUFFER->buf[--CURRENT_BUFFER->len] = '\0';
-        }
+    switch(event->keysym.sym) {
+        case SDLK_BACKSPACE:
+            if ( isEditMode(MODE) && CURRENT_BUFFER && CURRENT_BUFFER->len > 0)
+                CURRENT_BUFFER->buf[--CURRENT_BUFFER->len] = '\0';
+            return;
+        case SDLK_MINUS:
+            GRAPH_SCALE *= 0.9;
+            return;
+        case SDLK_EQUALS:
+            GRAPH_SCALE *= 1.1;
+            return;
+        return;
     }
-    return;
 }
 
 void doKeyUp(SDL_KeyboardEvent *event) {
@@ -679,6 +747,12 @@ void doKeyUp(SDL_KeyboardEvent *event) {
         case SDLK_ESCAPE:
             if (MODE == Travel) CUT = NULL; // clear cut node on a double escape
             switchMode(Travel);
+            return;
+        case SDLK_MINUS:
+            GRAPH_SCALE *= (9./10.);
+            return;
+        case SDLK_EQUALS:
+            GRAPH_SCALE *= (10./9.);
             return;
     }
 
@@ -751,7 +825,7 @@ int getDepth(Node* node) {
 void calculateOffsets(Node* node) {
 
     logPrint("Calculating offsets for %p...\n", node);
-    int text_pixel_length = getWidth(node->text.buf, true);
+    int text_pixel_length = getWidth(node->text.buf, true) * GRAPH_SCALE;
     node -> x_offset  = 0;
     node -> rightmost = text_pixel_length/2;
     node -> leftmost  = -text_pixel_length/2;
@@ -792,7 +866,7 @@ void calculateOffsets(Node* node) {
 }
 
 void calculateMaxHeights(Node* node, int level, int* max_heights) {
-    int node_height = getHeight(node->text.buf, true)+RADIUS;
+    int node_height = getHeight(node->text.buf, true) * GRAPH_SCALE +RADIUS;
     if (node_height > max_heights[level]) {
         max_heights[level] = node_height;
     }
@@ -857,32 +931,35 @@ void recursivelyPrintPositions(Node* node, int level){
 
 
 // RENDERING
-
 void renderMessage(char* message, Point pos, double scale, SDL_Color color, bool wrap){
     if (!message) return;
-    // create surface from string
-    SDL_Surface* surface_message;
-    if ( wrap )
-        surface_message = TTF_RenderText_Blended_Wrapped(FONT, message, color, NUM_CHARS_B4_WRAP * TEXTBOX_WIDTH_SCALE * scale);
-    else
-        surface_message = TTF_RenderText_Solid(FONT, message, color);
 
-    // now you can convert it into a texture
-    SDL_Texture* texture_message = SDL_CreateTextureFromSurface(APP.renderer, surface_message);
+    char** lines = getLines(message, wrap);
+    int cur_line = 0;
+    while(lines[cur_line]) {
+        // create surface from string
+        SDL_Surface* surface_message;
+        surface_message = TTF_RenderText_Solid(FONT, lines[cur_line], color);
 
-    SDL_Rect message_rect;
-    message_rect.x = pos.x;
-    message_rect.y = pos.y;
-    message_rect.w = getWidth(message, wrap) * scale;
-    message_rect.h = getHeight(message, wrap) * scale;
+        // now you can convert it into a texture
+        SDL_Texture* texture_message = SDL_CreateTextureFromSurface(APP.renderer, surface_message);
 
-    SDL_SetRenderDrawColor(APP.renderer, BACKGROUND_COLOR[0], BACKGROUND_COLOR[1], BACKGROUND_COLOR[2], BACKGROUND_COLOR[3]);
-    SDL_RenderFillRect(APP.renderer, &message_rect);
-    logPrint("Rendering %s %d %d\n", message, message_rect.w, message_rect.h);
-    SDL_RenderCopy(APP.renderer, texture_message, NULL, &message_rect);
-    SDL_FreeSurface(surface_message);
-    SDL_DestroyTexture(texture_message);
-    logPrint("Rendered\n");
+        SDL_Rect message_rect;
+        message_rect.x = pos.x;
+        message_rect.y = pos.y + (TEXTBOX_HEIGHT * cur_line * GRAPH_SCALE);
+        message_rect.w = strlen(lines[cur_line]) * TEXTBOX_WIDTH_SCALE * scale;
+        message_rect.h = TEXTBOX_HEIGHT * scale;
+
+        SDL_SetRenderDrawColor(APP.renderer, BACKGROUND_COLOR[0], BACKGROUND_COLOR[1], BACKGROUND_COLOR[2], BACKGROUND_COLOR[3]);
+        SDL_RenderFillRect(APP.renderer, &message_rect);
+        logPrint("Rendering %s %d %d\n", message, message_rect.w, message_rect.h);
+        SDL_RenderCopy(APP.renderer, texture_message, NULL, &message_rect);
+        SDL_FreeSurface(surface_message);
+        SDL_DestroyTexture(texture_message);
+        free(lines[cur_line]);
+        cur_line++;
+    }
+    free(lines);
 }
 
 void drawBox(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int offset, Uint8 r, Uint8 g, Uint8 b, Uint8 a){
@@ -918,8 +995,8 @@ void drawNode(Node* node) {
     int y = node->pos.y;
     logPrint("Children pointer: %p, num: %lu\n", node->children, node->children->num);
     /* draw red ring for unselected nodes, green for selected */
-    int width  = getWidth(node->text.buf, 1);
-    int height = getHeight(node->text.buf, 1);
+    int width  = getWidth(node->text.buf, 1) * GRAPH_SCALE;
+    int height = getHeight(node->text.buf, 1) * GRAPH_SCALE;
     if ( is_visible(node) ){
         if (node == CUT)
             drawBorder(APP.renderer, x, y, width, height, THICKNESS, CUT_COLOR[0], CUT_COLOR[1], CUT_COLOR[2], CUT_COLOR[3]);
@@ -932,7 +1009,7 @@ void drawNode(Node* node) {
     /* draw edges between parent and child nodes */
     if (node != GRAPH.root && (is_visible(node->p) || is_visible(node)) ){
         SDL_SetRenderDrawColor(APP.renderer, EDGE_COLOR[0], EDGE_COLOR[1], EDGE_COLOR[2], EDGE_COLOR[3]);
-        SDL_RenderDrawLine(APP.renderer, x, y - (height/2), node->p->pos.x, node->p->pos.y + (getHeight(node->p->text.buf, 1) / 2));
+        SDL_RenderDrawLine(APP.renderer, x, y - (height*GRAPH_SCALE/2), node->p->pos.x, node->p->pos.y + (getHeight(node->p->text.buf, 1) * GRAPH_SCALE / 2));
     }
 
     if ( is_visible(node) ){
@@ -941,7 +1018,20 @@ void drawNode(Node* node) {
         message_pos.y = y - (height / 2);
 
         /* render node text */
-        renderMessage(node->text.buf, message_pos, 1.0, EDIT_COLOR, 1);
+        renderMessage(node->text.buf, message_pos, GRAPH_SCALE, EDIT_COLOR, 1);
+        char** lines = getLines(node->text.buf, 1);
+        int cur_line = 0;
+        char* line = lines[cur_line];
+        while ( line ){
+            printf("call loop\n");
+            printf("%s\n",line);
+            printf("freeing %p\n", line);
+            if ( *line ) free (line);
+            line = lines[++cur_line];
+            printf("call loop done\n");
+
+        }
+        free ( lines );
         /* render hint text */
         if ( isHintMode(MODE) && strlen(node->hint_text) > 0 ){
             // dont render hint text that doesn't match hint buffer
@@ -954,11 +1044,11 @@ void drawNode(Node* node) {
                     }
                 }
             }
-            // position char in center of node
+            // position char in top left of node
             if ( render_hint ) {
-                message_pos.x = x  - (int)(width / 2) - THICKNESS;
-                message_pos.y = y  - (int)(height / 2) - THICKNESS - RADIUS;
-                renderMessage(node->hint_text, message_pos, 0.75, HINT_COLOR, 0);
+                message_pos.x = x - (int)(width/ 2) - THICKNESS;
+                message_pos.y = y  - (int)(height/ 2) - THICKNESS - (RADIUS * GRAPH_SCALE);
+                renderMessage(node->hint_text, message_pos, 0.75 * GRAPH_SCALE, HINT_COLOR, 0);
             }
         }
     }
@@ -988,24 +1078,24 @@ void prepareScene() {
     // Draw filename
     Point filename_pos;
     filename_pos.x = (int) ((0.0) * APP.window_size.x);
-    filename_pos.y = (int) ((1.0) * APP.window_size.y - TEXTBOX_HEIGHT);
-    renderMessage(FILENAME_BUFFER.buf, filename_pos, 1.0, EDIT_COLOR, 0);
+    filename_pos.y = (int) ((1.0) * APP.window_size.y - (TEXTBOX_HEIGHT * UI_SCALE));
+    renderMessage(FILENAME_BUFFER.buf, filename_pos, UI_SCALE, EDIT_COLOR, 0);
 
     // Draw mode
     Point mode_text_pos;
     mode_text_pos.x = (int) ((0.0) * APP.window_size.x);
     mode_text_pos.y = (int) ((0.0) * APP.window_size.y);
-    renderMessage(getModeName(MODE), mode_text_pos, 1.0, EDIT_COLOR, 0);
+    renderMessage(getModeName(MODE), mode_text_pos, UI_SCALE, EDIT_COLOR, 0);
 
     //Draw hint buffer
     Point hint_buf_pos;
-    hint_buf_pos.x = (int) ((1.0 * APP.window_size.x) - (HINT_BUFFER.len * TEXTBOX_WIDTH_SCALE));
-    hint_buf_pos.y = (int) ((1.0) * APP.window_size.y - TEXTBOX_HEIGHT);
-    renderMessage(HINT_BUFFER.buf, hint_buf_pos, 1.0, HINT_COLOR, 0);
+    hint_buf_pos.x = (int) ((1.0 * APP.window_size.x) - (HINT_BUFFER.len * TEXTBOX_WIDTH_SCALE * UI_SCALE));
+    hint_buf_pos.y = (int) ((1.0) * APP.window_size.y - (TEXTBOX_HEIGHT * UI_SCALE));
+    renderMessage(HINT_BUFFER.buf, hint_buf_pos, UI_SCALE, HINT_COLOR, 0);
 
     if ( TOGGLE_MODE ){
         Point toggle_indicator_pos;
-        toggle_indicator_pos.x = (int) ((1.0 * APP.window_size.x) - (strlen(TOGGLE_INDICATOR) * TEXTBOX_WIDTH_SCALE));
+        toggle_indicator_pos.x = (int) ((1.0 * APP.window_size.x) - (strlen(TOGGLE_INDICATOR) * TEXTBOX_WIDTH_SCALE * UI_SCALE));
         toggle_indicator_pos.y = (int) ((0.0) * APP.window_size.y);
         renderMessage(TOGGLE_INDICATOR, toggle_indicator_pos, 1.0, EDIT_COLOR, 0);
     }
