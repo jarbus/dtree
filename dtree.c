@@ -115,10 +115,6 @@ Array* initArray(size_t initial_size) {
 }
 void insertArray(Array *a, void* element) {
     // a->num is the number of used entries, because a->array[a->num++] updates a->num only *after* the array has been accessed.
-    printf("fddfdf\n");
-    printf("fddfdf %p\n", a->array);
-    printf("a->num %ld\n", a->num);
-    printf("a->num %ld a->size %ld \n", a->num, a->size);
     // Therefore a->num can go up to a->size
     if (a->num == a->size) {
         a->size *= 2;
@@ -248,6 +244,7 @@ static char* TOGGLE_INDICATOR = "MODE PERSIST\0";
 static Node* LEFT_NEIGHBOR = NULL; // left and right neighbors of the selected node
 static Node* RIGHT_NEIGHBOR = NULL;
 static int OFFSCREEN_PADDING = 500;
+static int CURSOR_POSITION = 0;
 
 // GENERAL UTIL FUNCTIONS
 void removeNodeFromGraph(Node* node);
@@ -255,6 +252,7 @@ int min(int a, int b);
 int max(int a, int b);
 int getWidth (char* message, bool wrap);
 int getHeight (char* message, bool wrap);
+void deleteCharInBufferRelativeToCursor(int relative_position);
 // READ/WRITE
 void replaceChar(char* arr, char find, char replace);
 unsigned int countTabs(char* string);
@@ -270,6 +268,7 @@ void populateHintText(Node* node);
 // EVENT HANDLING
 void activateHints();
 void switchMode(enum Mode to);
+void switchCurrentBuffer(Buffer* buffer);
 void hintFunction(Node* node);
 void handleTextInput(SDL_Event *event);
 void doKeyDown(SDL_KeyboardEvent *event);
@@ -284,9 +283,9 @@ void centerOnSelected(Node* node, int selected_x, int selected_y);
 void calculatePositions(Node* root, Node* selected);
 void recursivelyPrintPositions(Node* node, int level);
 // RENDERING
-void renderMessage(char* message, Point pos, double scale, SDL_Color color, bool wrap);
+void renderMessage(char* message, Point pos, double scale, SDL_Color color, bool wrap, bool cursor);
 void drawBox(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int offset, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
-void drawBorder(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
+void drawBorder(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int thickness, const int* color);
 void drawNode(Node* node);
 char** getLines(char* message, int wrap);
 char* getEndOfLine(char* line_start, int wrap);
@@ -326,7 +325,6 @@ int getWidth (char* message, bool wrap){
         logPrint("back in loop\n");
         if ( !line_end ){logPrint("breaking\n"); break;}
         int line_len = ( line_end - tok );
-        printf("line len %d\n", line_len);
         max_width = max(line_len, max_width);
         // copy all chars up until line_end
         tok = line_end;
@@ -594,7 +592,6 @@ void populateHintText(Node* node){
     logPrint("HintTextCleared\n");
     if(LEFT_NEIGHBOR) insertArray(HINT_NODES, LEFT_NEIGHBOR);
     if(RIGHT_NEIGHBOR) insertArray(HINT_NODES, RIGHT_NEIGHBOR);
-    logPrint("HintTextCleared\n");
     populateHintNodes(GRAPH.root);
     logPrint("Hint Nodes Populated\n");
     char* prefix = "";
@@ -635,7 +632,12 @@ void populateHintText(Node* node){
 
 void activateHints(){
     populateHintText(GRAPH.selected);
-    CURRENT_BUFFER = &HINT_BUFFER;
+    switchCurrentBuffer(&HINT_BUFFER);
+}
+
+void switchCurrentBuffer(Buffer* buffer){
+    CURRENT_BUFFER = buffer;
+    CURSOR_POSITION = buffer->len - 1;
 }
 
 void switchMode(enum Mode to){
@@ -644,8 +646,8 @@ void switchMode(enum Mode to){
         clearBuffer(&HINT_BUFFER);
     }
     switch ( to ){
-        case Edit: CURRENT_BUFFER = &GRAPH.selected->text; break;
-        case FilenameEdit: CURRENT_BUFFER = &FILENAME_BUFFER; to = Edit; break;
+        case Edit: switchCurrentBuffer(&GRAPH.selected->text); break;
+        case FilenameEdit: switchCurrentBuffer(&FILENAME_BUFFER); to = Edit; break;
         case Travel: TOGGLE_MODE = false; break;
         default: break;
     }
@@ -656,7 +658,7 @@ void switchMode(enum Mode to){
 
 // When a hint node is selected, this function is run
 void hintFunction(Node* node){
-    printf("hintFunction()\n");
+    logPrint("hintFunction()\n");
     switch(MODE){
         case Travel: GRAPH.selected = node; break;
         case Delete: removeNodeFromGraph(node); break;
@@ -677,6 +679,25 @@ void hintFunction(Node* node){
         switchMode( Travel );
 }
 
+void insertCharIntoCurrentBuffer(char c){
+    if ( !CURRENT_BUFFER || CURRENT_BUFFER->len < 0 || CURRENT_BUFFER->len >= CURRENT_BUFFER->size) return;
+    for (int i = CURRENT_BUFFER->len-1; i > CURSOR_POSITION; i--) {
+        CURRENT_BUFFER->buf[i+1] = CURRENT_BUFFER->buf[i];
+    }
+    CURRENT_BUFFER->buf[++CURSOR_POSITION] = c;
+    CURRENT_BUFFER->len += 1;
+
+}
+void deleteCharInBufferRelativeToCursor(int relative_position){
+    // relative position allows us to use the same code for both backspace and delete
+    for (int i = CURSOR_POSITION + relative_position; i < CURRENT_BUFFER->len-1; i++) {
+        CURRENT_BUFFER->buf[i] = CURRENT_BUFFER->buf[i+1];
+    }
+    CURRENT_BUFFER->buf[CURRENT_BUFFER->len-1] = '\0';
+    CURSOR_POSITION -= 1 - relative_position;
+    CURRENT_BUFFER->len -= 1;
+}
+
 void handleTextInput(SDL_Event *event){
     if ( CURRENT_BUFFER && CURRENT_BUFFER->len < CURRENT_BUFFER->size ){
         logPrint("Adding text to current buffer...\n");
@@ -692,8 +713,8 @@ void handleTextInput(SDL_Event *event){
             }
         }
 
-        if ( add_text && CURRENT_BUFFER->len < CURRENT_BUFFER->size)
-            CURRENT_BUFFER->buf[(CURRENT_BUFFER->len)++] = event->edit.text[0];
+        // Add text to buffer
+        if ( add_text ) insertCharIntoCurrentBuffer(event->edit.text[0]);
         logPrint("Detected character: %c\n", event->edit.text[0]);
         logPrint("New CURRENT_BUFFER: len %d: %s\n", CURRENT_BUFFER->len, CURRENT_BUFFER->buf);
     }
@@ -722,19 +743,52 @@ void handleTextInput(SDL_Event *event){
     }
 }
 
+void moveCursorLine(int relative_line){
+    char** lines = getLines(GRAPH.selected->text.buf, 1);
+
+    int len_so_far = 0;
+    for (int i = 0; lines[i]; i++) {
+            int col = CURSOR_POSITION - len_so_far;
+            // Move Up
+            if ( relative_line == -1 && i > 0 && CURSOR_POSITION >= len_so_far && CURSOR_POSITION < len_so_far + strlen(lines[i])){
+                if ( col > strlen(lines[i-1]) ) {
+                    CURSOR_POSITION -= col + 1 + 1;
+                }
+                else {
+                    CURSOR_POSITION -= col + 1;                  // move to end of line - 1
+                    CURSOR_POSITION -= strlen(lines[i-1]) - col; //move to col'th idx of line i-1
+                }
+            }
+            // Move Down
+            else if ( relative_line == 1 && lines[i+1] && CURSOR_POSITION > len_so_far && CURSOR_POSITION < len_so_far + strlen(lines[i])){
+                if ( col > strlen(lines[i+1]) ) {
+                    CURSOR_POSITION += strlen(lines[i]) - col + strlen(lines[i+1]);
+                }
+                else {
+                    CURSOR_POSITION += strlen(lines[i]) + 1 - col;                  // move to end of line - 1
+                    CURSOR_POSITION += col; //move to col'th idx of line i-1
+                }
+                break;
+            }
+        len_so_far += strlen(lines[i]) + 1;
+    }
+    for (int i = 0; lines[i]; i++)
+        free(lines[i]);
+    free(lines);
+
+}
+
 void doKeyDown(SDL_KeyboardEvent *event) {
     switch(event->keysym.sym) {
-        case SDLK_BACKSPACE:
-            if ( isEditMode(MODE) && CURRENT_BUFFER && CURRENT_BUFFER->len > 0)
-                CURRENT_BUFFER->buf[--CURRENT_BUFFER->len] = '\0';
-            return;
-        case SDLK_MINUS:
-            GRAPH_SCALE *= 0.9;
-            return;
-        case SDLK_EQUALS:
-            GRAPH_SCALE *= 1.1;
-            return;
-        return;
+        case SDLK_BACKSPACE: if ( isEditMode(MODE) ) deleteCharInBufferRelativeToCursor(0); return;
+        case SDLK_DELETE:   if ( isEditMode(MODE) ) deleteCharInBufferRelativeToCursor(1); return;
+        case SDLK_MINUS:     GRAPH_SCALE *= (9./10.); return;
+        case SDLK_EQUALS:    GRAPH_SCALE *= (10./9.); return;
+        case SDLK_LEFT:      CURSOR_POSITION = max(CURSOR_POSITION-1,-1); return;
+        case SDLK_RIGHT:     CURSOR_POSITION = min(CURSOR_POSITION+1,CURRENT_BUFFER->len-1); return;
+        case SDLK_UP:   moveCursorLine(-1); return;
+        case SDLK_DOWN: moveCursorLine(1);  return;
+
     }
 }
 
@@ -747,12 +801,6 @@ void doKeyUp(SDL_KeyboardEvent *event) {
         case SDLK_ESCAPE:
             if (MODE == Travel) CUT = NULL; // clear cut node on a double escape
             switchMode(Travel);
-            return;
-        case SDLK_MINUS:
-            GRAPH_SCALE *= (9./10.);
-            return;
-        case SDLK_EQUALS:
-            GRAPH_SCALE *= (10./9.);
             return;
     }
 
@@ -775,8 +823,7 @@ void doKeyUp(SDL_KeyboardEvent *event) {
         case Edit:
             switch(event->keysym.sym) {
                 case SDLK_RETURN:
-                    if ( CURRENT_BUFFER && CURRENT_BUFFER->len >= 0)
-                        CURRENT_BUFFER->buf[CURRENT_BUFFER->len++] = '\n';
+                    insertCharIntoCurrentBuffer('\n');
                     return;
             }
             break; // end of Edit bindings
@@ -931,12 +978,14 @@ void recursivelyPrintPositions(Node* node, int level){
 
 
 // RENDERING
-void renderMessage(char* message, Point pos, double scale, SDL_Color color, bool wrap){
+void renderMessage(char* message, Point pos, double scale, SDL_Color color, bool wrap, bool cursor){
     if (!message) return;
 
     char** lines = getLines(message, wrap);
     int cur_line = 0;
+    int len_so_far = 0 ;
     while(lines[cur_line]) {
+
         // create surface from string
         SDL_Surface* surface_message;
         surface_message = TTF_RenderText_Solid(FONT, lines[cur_line], color);
@@ -954,10 +1003,21 @@ void renderMessage(char* message, Point pos, double scale, SDL_Color color, bool
         SDL_RenderFillRect(APP.renderer, &message_rect);
         logPrint("Rendering %s %d %d\n", message, message_rect.w, message_rect.h);
         SDL_RenderCopy(APP.renderer, texture_message, NULL, &message_rect);
+
+        if (cursor && len_so_far <= CURSOR_POSITION + 1 && CURSOR_POSITION < len_so_far + strlen(lines[cur_line]) ){
+
+            int cursor_offset = (CURSOR_POSITION + 1 - len_so_far) * TEXTBOX_WIDTH_SCALE * GRAPH_SCALE;
+            SDL_SetRenderDrawColor(APP.renderer, 255, 255, 255, 255);
+            SDL_RenderDrawLine(APP.renderer, message_rect.x + cursor_offset, message_rect.y, message_rect.x + cursor_offset, message_rect.y + (TEXTBOX_HEIGHT * GRAPH_SCALE));
+        }
+
+
         SDL_FreeSurface(surface_message);
         SDL_DestroyTexture(texture_message);
+        len_so_far += strlen(lines[cur_line]) + 1;
         free(lines[cur_line]);
         cur_line++;
+
     }
     free(lines);
 }
@@ -972,9 +1032,9 @@ void drawBox(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int
     SDL_RenderDrawRect(surface, &rect);
 }
 
-void drawBorder(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int thickness, Uint8 r, Uint8 g, Uint8 b, Uint8 a){
+void drawBorder(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int thickness, const int* color){
     for (int i = 0; i < thickness; ++i)
-        drawBox(surface, n_cx , n_cy, len, height, i, r, g, b, a);
+        drawBox(surface, n_cx , n_cy, len, height, i, color[0], color[1], color[2], color[3]);
 }
 
 bool is_visible(Node* node){
@@ -999,11 +1059,11 @@ void drawNode(Node* node) {
     int height = getHeight(node->text.buf, 1) * GRAPH_SCALE;
     if ( is_visible(node) ){
         if (node == CUT)
-            drawBorder(APP.renderer, x, y, width, height, THICKNESS, CUT_COLOR[0], CUT_COLOR[1], CUT_COLOR[2], CUT_COLOR[3]);
+            drawBorder(APP.renderer, x, y, width, height, THICKNESS, CUT_COLOR);
         else if (node == GRAPH.selected)
-            drawBorder(APP.renderer, x, y, width, height, THICKNESS, SELECTED_COLOR[0], SELECTED_COLOR[1], SELECTED_COLOR[2], SELECTED_COLOR[3]);
+            drawBorder(APP.renderer, x, y, width, height, THICKNESS, SELECTED_COLOR);
         else
-            drawBorder(APP.renderer, x, y, width, height, THICKNESS, UNSELECTED_COLOR[0], UNSELECTED_COLOR[1], UNSELECTED_COLOR[2], UNSELECTED_COLOR[3]);
+            drawBorder(APP.renderer, x, y, width, height, THICKNESS, UNSELECTED_COLOR);
     }
 
     /* draw edges between parent and child nodes */
@@ -1018,17 +1078,13 @@ void drawNode(Node* node) {
         message_pos.y = y - (height / 2);
 
         /* render node text */
-        renderMessage(node->text.buf, message_pos, GRAPH_SCALE, EDIT_COLOR, 1);
+        renderMessage(node->text.buf, message_pos, GRAPH_SCALE, EDIT_COLOR, 1, &node->text == CURRENT_BUFFER);
         char** lines = getLines(node->text.buf, 1);
         int cur_line = 0;
         char* line = lines[cur_line];
         while ( line ){
-            printf("call loop\n");
-            printf("%s\n",line);
-            printf("freeing %p\n", line);
             if ( *line ) free (line);
             line = lines[++cur_line];
-            printf("call loop done\n");
 
         }
         free ( lines );
@@ -1048,7 +1104,7 @@ void drawNode(Node* node) {
             if ( render_hint ) {
                 message_pos.x = x - (int)(width/ 2) - THICKNESS;
                 message_pos.y = y  - (int)(height/ 2) - THICKNESS - (RADIUS * GRAPH_SCALE);
-                renderMessage(node->hint_text, message_pos, 0.75 * GRAPH_SCALE, HINT_COLOR, 0);
+                renderMessage(node->hint_text, message_pos, 0.75 * GRAPH_SCALE, HINT_COLOR, 0, 0);
             }
         }
     }
@@ -1079,25 +1135,25 @@ void prepareScene() {
     Point filename_pos;
     filename_pos.x = (int) ((0.0) * APP.window_size.x);
     filename_pos.y = (int) ((1.0) * APP.window_size.y - (TEXTBOX_HEIGHT * UI_SCALE));
-    renderMessage(FILENAME_BUFFER.buf, filename_pos, UI_SCALE, EDIT_COLOR, 0);
+    renderMessage(FILENAME_BUFFER.buf, filename_pos, UI_SCALE, EDIT_COLOR, 0, &FILENAME_BUFFER == CURRENT_BUFFER);
 
     // Draw mode
     Point mode_text_pos;
     mode_text_pos.x = (int) ((0.0) * APP.window_size.x);
     mode_text_pos.y = (int) ((0.0) * APP.window_size.y);
-    renderMessage(getModeName(MODE), mode_text_pos, UI_SCALE, EDIT_COLOR, 0);
+    renderMessage(getModeName(MODE), mode_text_pos, UI_SCALE, EDIT_COLOR, 0, 0);
 
     //Draw hint buffer
     Point hint_buf_pos;
     hint_buf_pos.x = (int) ((1.0 * APP.window_size.x) - (HINT_BUFFER.len * TEXTBOX_WIDTH_SCALE * UI_SCALE));
     hint_buf_pos.y = (int) ((1.0) * APP.window_size.y - (TEXTBOX_HEIGHT * UI_SCALE));
-    renderMessage(HINT_BUFFER.buf, hint_buf_pos, UI_SCALE, HINT_COLOR, 0);
+    renderMessage(HINT_BUFFER.buf, hint_buf_pos, UI_SCALE, HINT_COLOR, 0, 0);
 
     if ( TOGGLE_MODE ){
         Point toggle_indicator_pos;
         toggle_indicator_pos.x = (int) ((1.0 * APP.window_size.x) - (strlen(TOGGLE_INDICATOR) * TEXTBOX_WIDTH_SCALE * UI_SCALE));
         toggle_indicator_pos.y = (int) ((0.0) * APP.window_size.y);
-        renderMessage(TOGGLE_INDICATOR, toggle_indicator_pos, 1.0, EDIT_COLOR, 0);
+        renderMessage(TOGGLE_INDICATOR, toggle_indicator_pos, 1.0, EDIT_COLOR, 0, 0);
     }
 }
 
