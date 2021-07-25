@@ -446,8 +446,8 @@ void calculateNeighbors(Node* root, Node* selected) {
 
     //                     buffer overflow waiting to happen
     //                     VVVV
-    Node** queue =  calloc(8192, sizeof(Node*));
-    int* node_depths =  calloc(8192, sizeof(int));
+    Node** queue =  calloc(81920, sizeof(Node*));
+    int* node_depths =  calloc(81920, sizeof(int));
 
     queue[0] = root;
     int index = 0;
