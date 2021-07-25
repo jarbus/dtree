@@ -25,16 +25,16 @@ static const int UNSELECTED_COLOR[4] = {0, 55, 0, 0};
 static const int CUT_COLOR[4] =        {0, 0, 220, 0};
 static const int EDGE_COLOR[4] =       {220, 220, 220, 0};
 static const int BACKGROUND_COLOR[4] = {15, 15, 15, 255};
-static const int TEXTBOX_WIDTH_SCALE = 25;                        // width of char
-static const int TEXTBOX_HEIGHT = 50;                             // height of char
+static int TEXTBOX_WIDTH_SCALE = 25;                        // width of char
+static int TEXTBOX_HEIGHT = 50;                             // height of char
 static const int FILENAME_BUFFER_MAX_SIZE = 64;
 static const int HINT_BUFFER_MAX_SIZE = 3;
 static const int MAX_TEXT_LEN = 128;                              // Max Num of chars in a node
-static const int NUM_CHARS_B4_WRAP = 20;
+static int NUM_CHARS_B4_WRAP = 20;
 // radius and thickness of node box
 static const int RADIUS = 50;
 static const int THICKNESS = 5;
-static const int FONT_SIZE = 40;
+static int FONT_SIZE = 40;
 static const char* FONT_NAME = "./assets/SourceCodePro-Regular.otf";   // Default Font name
 static const char* HINT_CHARS = "adfghjkl;\0";              // characters to use for hints
 
@@ -679,6 +679,18 @@ void doKeyUp(SDL_KeyboardEvent *event) {
         case SDLK_ESCAPE:
             if (MODE == Travel) CUT = NULL; // clear cut node on a double escape
             switchMode(Travel);
+            return;
+        case SDLK_MINUS:
+            FONT_SIZE -= 5;
+            TEXTBOX_HEIGHT -= 3;
+            TEXTBOX_WIDTH_SCALE -= 2;
+            NUM_CHARS_B4_WRAP -= 1;
+            return;
+        case SDLK_EQUALS:
+            FONT_SIZE += 5;
+            TEXTBOX_HEIGHT += 3;
+            TEXTBOX_WIDTH_SCALE += 2;
+            NUM_CHARS_B4_WRAP += 1;
             return;
     }
 
