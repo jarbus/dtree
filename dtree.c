@@ -501,11 +501,13 @@ void clearHintText() {
 
 // Add all visible nodes to HINT_NODES
 void populateHintNodes(Node* node){
-    if ( !node )
-        return;
+    if ( !node ) return;
+    if ( node == GRAPH.selected->p ) insertArray(HINT_NODES, node);
     logPrint("Adding hint node: %dx%d\n", node->pos.x, node->pos.y);
-    if ( -(2*getWidth(node->text.buf, 1)) <= node->pos.x && node->pos.x < APP.window_size.x+(2*getWidth(node->text.buf, 1)) &&\
-            RADIUS < node->pos.y && node->pos.y < APP.window_size.y+(2*getHeight(node->text.buf, 1))) {
+    if (-(2*getWidth(node->text.buf, 1)) <= node->pos.x &&
+        node->pos.x < APP.window_size.x+(2*getWidth(node->text.buf, 1)) &&
+        RADIUS < node->pos.y &&
+        node->pos.y < APP.window_size.y+(2*getHeight(node->text.buf, 1))) {
         insertArray(HINT_NODES, node);
     }
     for (int i = 0; i < node->children->num; ++i) {
@@ -558,6 +560,7 @@ void populateHintText(Node* node){
 
     // parent is 'k', left neighbor 'h', right neighbor 'l'
     strcpy(node->p->hint_text,"k");
+    strcpy(node->hint_text,"j");
     if (LEFT_NEIGHBOR)
         strcpy(LEFT_NEIGHBOR->hint_text, "h");
     if (RIGHT_NEIGHBOR)
