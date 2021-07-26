@@ -522,7 +522,7 @@ void populateHintText(Node* node){
     calculateNeighbors(GRAPH.root, GRAPH.selected);
     clearHintText();
     HINT_NODES = initArray(10);
-    if(LEFT_NEIGHBOR) insertArray(HINT_NODES, LEFT_NEIGHBOR); 
+    if(LEFT_NEIGHBOR) insertArray(HINT_NODES, LEFT_NEIGHBOR);
     if(RIGHT_NEIGHBOR) insertArray(HINT_NODES, RIGHT_NEIGHBOR);
     populateHintNodes(GRAPH.root);
     logPrint("Cleared\n");
@@ -534,7 +534,7 @@ void populateHintText(Node* node){
         logPrint("Iterating while loop, back: %d, front: %d\n", back, front);
         for (int i = 0; i < strlen(HINT_CHARS); ++i) {
             // blacklist hard-coded hints
-            if (HINT_CHARS[i] == 'k' || HINT_CHARS[i] == 'h' || HINT_CHARS[i] == 'l')
+            if (HINT_CHARS[i] == 'k' || HINT_CHARS[i] == 'h' || HINT_CHARS[i] == 'l' || HINT_CHARS[i] == 'j')
                 continue;
 
             queue[back] = calloc(HINT_BUFFER.size+1, sizeof(char));
