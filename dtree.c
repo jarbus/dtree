@@ -600,7 +600,7 @@ void hintFunction(Node* node){
         case Cut: CUT = node; switchMode(Paste); break;
         case MakeChild: makeChild(node); activateHints(); break;
         case Paste:
-            if ( !CUT || isInSubtree(node, CUT) ) break;
+            if ( !CUT || isInSubtree(CUT, node) ) break;
             removeFromArray(CUT->p->children, CUT);
             insertArray(node->children, CUT);
             CUT->p = node;
