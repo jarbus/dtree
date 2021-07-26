@@ -534,8 +534,10 @@ void populateHintText(Node* node){
         logPrint("Iterating while loop, back: %d, front: %d\n", back, front);
         for (int i = 0; i < strlen(HINT_CHARS); ++i) {
             // blacklist hard-coded hints
-            if (HINT_CHARS[i] == 'k' || HINT_CHARS[i] == 'h' || HINT_CHARS[i] == 'l')
-                continue;
+            switch(HINT_CHARS[i]) {
+                case 'h': case 'j': case 'k': case 'l': continue;
+                default: break;
+            }
 
             queue[back] = calloc(HINT_BUFFER.size+1, sizeof(char));
             strcpy(queue[back], prefix);
