@@ -521,43 +521,47 @@ void populateHintText(Node* node){
     logPrint("Populate start\n");
     calculateNeighbors(GRAPH.root, GRAPH.selected);
     clearHintText();
+    logPrint("HintTextCleared\n");
     HINT_NODES = initArray(10);
     if(LEFT_NEIGHBOR) insertArray(HINT_NODES, LEFT_NEIGHBOR); 
     if(RIGHT_NEIGHBOR) insertArray(HINT_NODES, RIGHT_NEIGHBOR);
     populateHintNodes(GRAPH.root);
-    logPrint("Cleared\n");
-    logPrint("%p: %s\n",node->p->hint_text, node->p->hint_text);
+    logPrint("Hint Nodes Populated\n");
     char** queue = calloc(8192, sizeof(char*));
+    logPrint("calloc 1 succeeded\n");
     char* prefix = calloc(HINT_BUFFER.size+1, sizeof(char));
+    logPrint("calloc 2 succeeded\n");
     int front = 0, back=0, done=0;
     while ( !done ){
+        logPrint("in loop\n");
         logPrint("Iterating while loop, back: %d, front: %d\n", back, front);
         for (int i = 0; i < strlen(HINT_CHARS); ++i) {
             // blacklist hard-coded hints
             if (HINT_CHARS[i] == 'k' || HINT_CHARS[i] == 'h' || HINT_CHARS[i] == 'l')
                 continue;
 
+            logPrint("for looping %p\n", queue);
+            logPrint("for looping %p\n", queue[back]);
             queue[back] = calloc(HINT_BUFFER.size+1, sizeof(char));
+            logPrint("this copy\n");
             strcpy(queue[back], prefix);
+            logPrint("that copy\n");
             queue[back][strlen(prefix)] = HINT_CHARS[i];
+            logPrint("queue logic done\n");
             if ( back - front == HINT_NODES->num){
                 done = 1;
+                logPrint("breaking\n");
                 break;
             }
             back++;
         }
         prefix = queue[front++];
     }
-    for (int i = 0; i < front; ++i) {
-        free(queue[i]);
-    }
-    for (int i = 0; i < HINT_NODES->num; i++) {
+    for (int i = 0; i < HINT_NODES->num; i++)
         strcpy(HINT_NODES->array[i]->hint_text, queue[front + i]);
-        free(queue[front + i]);
-    }
-    for (int i = front + HINT_NODES->num; i < back; ++i) {
+
+    for (int i = 0; i < back; ++i)
         free(queue[i]);
-    }
     free(queue);
 
     // parent is 'k', left neighbor 'h', right neighbor 'l'
@@ -596,6 +600,7 @@ void switchMode(enum Mode to){
 
 // When a hint node is selected, this function is run
 void hintFunction(Node* node){
+    printf("hintFunction()\n");
     switch(MODE){
         case Travel: GRAPH.selected = node; break;
         case Delete: removeNodeFromGraph(node); break;
