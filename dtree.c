@@ -113,6 +113,10 @@ Array* initArray(size_t initial_size) {
 }
 void insertArray(Array *a, void* element) {
     // a->num is the number of used entries, because a->array[a->num++] updates a->num only *after* the array has been accessed.
+    printf("fddfdf\n");
+    printf("fddfdf %p\n", a->array);
+    printf("a->num %ld\n", a->num);
+    printf("a->num %ld a->size %ld \n", a->num, a->size);
     // Therefore a->num can go up to a->size
     if (a->num == a->size) {
         a->size *= 2;
@@ -136,6 +140,7 @@ void removeFromArray(Array *a, Node* node){
         a->num -= 1;
     }
 }
+
 void* freeArray(Array *a) {
     free(a->array);
     a->array = NULL;
@@ -189,7 +194,7 @@ void deleteNode(Node* node){
     logPrint("Freeing buffer\n");
     free(node->text.buf);
     logPrint("Freeing hint_text\n");
-    free(node->hint_text);
+    /* free(node->hint_text); */
     free(node);
     logPrint("Deleted node %p\n", node);
 }
@@ -233,6 +238,7 @@ static Buffer HINT_BUFFER = {NULL, 0, HINT_BUFFER_MAX_SIZE};
 static Buffer FILENAME_BUFFER = {NULL, 0, FILENAME_BUFFER_MAX_SIZE};
 static TTF_Font* FONT;          // Global Font object
 static Array* HINT_NODES;       // array of all nodes to be hinted to
+static char** HINT_TEXT_QUEUE;
 static Buffer* CURRENT_BUFFER;  // buffer to store current hint progress
 static Node* CUT = NULL;
 static bool TOGGLE_MODE = false;
@@ -481,9 +487,8 @@ void calculateNeighbors(Node* root, Node* selected) {
 void clearHintText() {
     logPrint("clearHintText()\n");
     // return if already freed
-    if (HINT_NODES == NULL || HINT_NODES->array == NULL){
-        return;
-    }
+    logPrint("Hint nodes %p", HINT_NODES);
+    logPrint("Hint nodes array %p", HINT_NODES->array);
     logPrint("Hint nodes %p, num %ld\n", HINT_NODES->array, HINT_NODES->num);
     // Clear all hint text in each hint node
     for (int i = 0; i < HINT_NODES->num; ++i) {
@@ -495,7 +500,9 @@ void clearHintText() {
     }
     // Clear hint node array
     logPrint("Freeing HINT_NODES\n");
-    HINT_NODES = freeArray ( HINT_NODES );
+    /* HINT_NODES = freeArray ( HINT_NODES ); */
+    HINT_NODES->num = 0;
+    logPrint("HINT_NODES: %p\n", HINT_NODES);
     logPrint("End clearHintText()\n");
 }
 
@@ -522,32 +529,22 @@ void populateHintText(Node* node){
     calculateNeighbors(GRAPH.root, GRAPH.selected);
     clearHintText();
     logPrint("HintTextCleared\n");
-    HINT_NODES = initArray(10);
-    if(LEFT_NEIGHBOR) insertArray(HINT_NODES, LEFT_NEIGHBOR); 
+    if(LEFT_NEIGHBOR) insertArray(HINT_NODES, LEFT_NEIGHBOR);
     if(RIGHT_NEIGHBOR) insertArray(HINT_NODES, RIGHT_NEIGHBOR);
+    logPrint("HintTextCleared\n");
     populateHintNodes(GRAPH.root);
     logPrint("Hint Nodes Populated\n");
-    char** queue = calloc(8192, sizeof(char*));
-    logPrint("calloc 1 succeeded\n");
-    char* prefix = calloc(HINT_BUFFER.size+1, sizeof(char));
-    logPrint("calloc 2 succeeded\n");
+    char* prefix = "";
     int front = 0, back=0, done=0;
     while ( !done ){
-        logPrint("in loop\n");
-        logPrint("Iterating while loop, back: %d, front: %d\n", back, front);
         for (int i = 0; i < strlen(HINT_CHARS); ++i) {
             // blacklist hard-coded hints
             if (HINT_CHARS[i] == 'k' || HINT_CHARS[i] == 'h' || HINT_CHARS[i] == 'l')
                 continue;
 
-            logPrint("for looping %p\n", queue);
-            logPrint("for looping %p\n", queue[back]);
-            queue[back] = calloc(HINT_BUFFER.size+1, sizeof(char));
-            logPrint("this copy\n");
-            strcpy(queue[back], prefix);
-            logPrint("that copy\n");
-            queue[back][strlen(prefix)] = HINT_CHARS[i];
-            logPrint("queue logic done\n");
+            for (int i = 0; i < HINT_BUFFER.size+1; ++i) HINT_TEXT_QUEUE[back][i] = '\0';
+            strcpy(HINT_TEXT_QUEUE[back], prefix);
+            HINT_TEXT_QUEUE[back][strlen(prefix)] = HINT_CHARS[i];
             if ( back - front == HINT_NODES->num){
                 done = 1;
                 logPrint("breaking\n");
@@ -555,14 +552,10 @@ void populateHintText(Node* node){
             }
             back++;
         }
-        prefix = queue[front++];
+        prefix = HINT_TEXT_QUEUE[front++];
     }
     for (int i = 0; i < HINT_NODES->num; i++)
-        strcpy(HINT_NODES->array[i]->hint_text, queue[front + i]);
-
-    for (int i = 0; i < back; ++i)
-        free(queue[i]);
-    free(queue);
+        strcpy(HINT_NODES->array[i]->hint_text, HINT_TEXT_QUEUE[front + i]);
 
     // parent is 'k', left neighbor 'h', right neighbor 'l'
     strcpy(node->p->hint_text,"k");
@@ -584,7 +577,7 @@ void activateHints(){
 
 void switchMode(enum Mode to){
     if ( isHintMode(MODE) ){
-        HINT_NODES = freeArray (HINT_NODES);
+        HINT_NODES->num = 0;
         clearBuffer(&HINT_BUFFER);
     }
     switch ( to ){
@@ -833,6 +826,7 @@ void centerOnSelected(Node* node, int selected_x, int selected_y) {
 
 // recomputes the coordinates of the nodes (i.e. populates pos field)
 void calculatePositions(Node* root, Node* selected){
+    logPrint("calculatingPositions...\n");
     int* y_levels = calloc(1+getDepth(root), sizeof(int));
 
     logPrint("Calculating offsets...\n");
@@ -888,6 +882,7 @@ void renderMessage(char* message, Point pos, double scale, SDL_Color color, bool
     SDL_RenderCopy(APP.renderer, texture_message, NULL, &message_rect);
     SDL_FreeSurface(surface_message);
     SDL_DestroyTexture(texture_message);
+    logPrint("Rendered\n");
 }
 
 void drawBox(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int offset, Uint8 r, Uint8 g, Uint8 b, Uint8 a){
@@ -977,14 +972,18 @@ void drawNode(Node* node) {
 
 /* re-computes graph and draws everything onto renderer */
 void prepareScene() {
+    logPrint("start prepareScene()\n");
     SDL_SetRenderDrawColor(APP.renderer, BACKGROUND_COLOR[0], BACKGROUND_COLOR[1], BACKGROUND_COLOR[2], BACKGROUND_COLOR[3]); /* Background color */
     SDL_RenderClear(APP.renderer);
 
+    logPrint("Rendered\n");
     // recompute the coordinates of each node in the tree
     calculatePositions(GRAPH.root, GRAPH.selected);
+    logPrint("calculatePositions\n");
 
     // Draw Graph
     drawNode(GRAPH.root);
+    logPrint("drawNode\n");
 
     // Draw filename
     Point filename_pos;
@@ -1022,6 +1021,8 @@ void presentScene() {
 
 void initSDL() {
     HINT_NODES = initArray(10);
+    logPrint("%p\n", HINT_NODES->array);
+    logPrint("%ld\n", HINT_NODES->num);
     int renderer_flags, window_flags;
     renderer_flags = SDL_RENDERER_ACCELERATED;
     window_flags = SDL_WINDOW_RESIZABLE;
@@ -1074,6 +1075,11 @@ int main(int argc, char *argv[]) {
         strcpy(FILENAME_BUFFER.buf, "unnamed.txt");
 
 
+    HINT_TEXT_QUEUE = calloc(8192, sizeof(char*));
+    for (int i = 0; i < 8192; ++i)
+        HINT_TEXT_QUEUE[i] = calloc(HINT_BUFFER.size + 1, sizeof(char));
+
+
     FILENAME_BUFFER.len = strlen(FILENAME_BUFFER.buf);
     HINT_BUFFER.buf = calloc(HINT_BUFFER.size + 1, sizeof(char));
 
@@ -1102,6 +1108,12 @@ int main(int argc, char *argv[]) {
 
         SDL_Delay(0);
     }
+
+
+    for (int i = 0; i < 8192; ++i)
+        free ( HINT_TEXT_QUEUE[i] );
+    free( HINT_TEXT_QUEUE );
+    HINT_NODES = freeArray ( HINT_NODES );
 
     if (HINT_BUFFER.buf) free(HINT_BUFFER.buf);
     free(FILENAME_BUFFER.buf);
