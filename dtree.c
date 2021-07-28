@@ -36,7 +36,7 @@ static const int RADIUS = 50;
 static const int THICKNESS = 5;
 static const int FONT_SIZE = 40;
 static const char* FONT_NAME = "./assets/SourceCodePro-Regular.otf";   // Default Font name
-static const char* HINT_CHARS = "adfghkl;\0";              // characters to use for hints
+static const char* HINT_CHARS = "adfghjkl;\0";              // characters to use for hints
 
 
 // ENUMS AND DATA STRUCTURES
