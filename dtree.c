@@ -192,7 +192,6 @@ void deleteNode(Node* node){
     logPrint("Freeing buffer\n");
     free(node->text.buf);
     logPrint("Freeing hint_text\n");
-    /* free(node->hint_text); */
     free(node);
     logPrint("Deleted node %p\n", node);
 }
@@ -602,7 +601,6 @@ void populateHintText(Node* node){
             if (HINT_CHARS[i] == 'k' || HINT_CHARS[i] == 'h' || HINT_CHARS[i] == 'l' || HINT_CHARS[i] == 'j')
                 continue;
 
-            for (int i = 0; i < HINT_BUFFER.size+1; ++i) HINT_TEXT_QUEUE[back][i] = '\0';
             strcpy(HINT_TEXT_QUEUE[back], prefix);
             HINT_TEXT_QUEUE[back][strlen(prefix)] = HINT_CHARS[i];
             if ( back - front == HINT_NODES->num){
