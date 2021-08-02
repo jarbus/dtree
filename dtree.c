@@ -339,7 +339,7 @@ int getHeight (char* message, bool wrap){
     if ( wrap ){
         int num_lines=1, chars_since_line_start=0, chars_since_last_space=0;
         for (int i = 0; i < strlen(message); ++i) {
-            if ( chars_since_line_start >= NUM_CHARS_B4_WRAP && message[i] != ' ' && message[i] != '\n' && !(i == strlen(message) - 1) ) {
+            if ( chars_since_line_start >= NUM_CHARS_B4_WRAP && message[i] != ' ' && message[i] != '\n' && i != strlen(message) - 1 ) {
                 chars_since_line_start = chars_since_last_space -1;
                 num_lines++;
             }
@@ -571,10 +571,10 @@ void populateHintNodes(Node* node){
     if ( !node ) return;
     if ( node == GRAPH.selected->p ) insertArray(HINT_NODES, node);
     logPrint("Adding hint node: %dx%d\n", node->pos.x, node->pos.y);
-    if (-(2*getWidth(node->text.buf, 1)) <= node->pos.x &&
-        node->pos.x < APP.window_size.x+(2*getWidth(node->text.buf, 1)) &&
+    if (-(2*getWidth(node->text.buf, true)) <= node->pos.x &&
+        node->pos.x < APP.window_size.x+(2*getWidth(node->text.buf, true)) &&
         RADIUS < node->pos.y &&
-        node->pos.y < APP.window_size.y+(2*getHeight(node->text.buf, 1))) {
+        node->pos.y < APP.window_size.y+(2*getHeight(node->text.buf, true))) {
         insertArray(HINT_NODES, node);
     }
     for (int i = 0; i < node->children->num; ++i) {
@@ -605,7 +605,6 @@ void populateHintText(Node* node){
             HINT_TEXT_QUEUE[back][strlen(prefix)] = HINT_CHARS[i];
             if ( back - front == HINT_NODES->num){
                 done = 1;
-                logPrint("breaking\n");
                 break;
             }
             back++;
@@ -1057,8 +1056,8 @@ void drawNode(Node* node) {
     int y = node->pos.y;
     logPrint("Children pointer: %p, num: %lu\n", node->children, node->children->num);
     /* draw red ring for unselected nodes, green for selected */
-    int width  = getWidth(node->text.buf, 1) * GRAPH_SCALE;
-    int height = getHeight(node->text.buf, 1) * GRAPH_SCALE;
+    int width  = getWidth(node->text.buf, true) * GRAPH_SCALE;
+    int height = getHeight(node->text.buf, true) * GRAPH_SCALE;
     if ( is_visible(node) ){
         if (node == CUT)
             drawBorder(APP.renderer, x, y, width, height, THICKNESS, CUT_COLOR);
@@ -1071,7 +1070,7 @@ void drawNode(Node* node) {
     /* draw edges between parent and child nodes */
     if (node != GRAPH.root && (is_visible(node->p) || is_visible(node)) ){
         SDL_SetRenderDrawColor(APP.renderer, EDGE_COLOR.r, EDGE_COLOR.g, EDGE_COLOR.b, 255);
-        SDL_RenderDrawLine(APP.renderer, x, y - (height*GRAPH_SCALE/2), node->p->pos.x, node->p->pos.y + (getHeight(node->p->text.buf, 1) * GRAPH_SCALE / 2));
+        SDL_RenderDrawLine(APP.renderer, x, y - (height*GRAPH_SCALE/2), node->p->pos.x, node->p->pos.y + (getHeight(node->p->text.buf, true) * GRAPH_SCALE / 2));
     }
 
     if ( is_visible(node) ){
