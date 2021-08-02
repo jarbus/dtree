@@ -29,6 +29,7 @@ static int TEXTBOX_WIDTH_SCALE = 25;                        // width of char
 static int TEXTBOX_HEIGHT = 50;                             // height of char
 static double UI_SCALE = 1.0;
 static double GRAPH_SCALE = 1.0;
+static const double ZOOM_SPEED = 1.1; // rate at which graph zooms out, > 1
 static const int FILENAME_BUFFER_MAX_SIZE = 64;
 static const int HINT_BUFFER_MAX_SIZE = 3;
 static const int MAX_TEXT_LEN = 128;                              // Max Num of chars in a node
@@ -787,8 +788,8 @@ void doKeyDown(SDL_KeyboardEvent *event) {
             }
         }
         switch(event->keysym.sym) {
-            case SDLK_MINUS:     GRAPH_SCALE *= (9./10.); return;
-            case SDLK_EQUALS:    GRAPH_SCALE *= (10./9.); return;
+            case SDLK_MINUS:     GRAPH_SCALE *= 1/ZOOM_SPEED; return;
+            case SDLK_EQUALS:    GRAPH_SCALE *= ZOOM_SPEED; return;
         }
 }
 
