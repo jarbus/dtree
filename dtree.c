@@ -18,13 +18,13 @@
 #define SCREEN_HEIGHT  720
 
 /* User Customizable Variables*/
-static const SDL_Color EDIT_COLOR =    {220, 220, 220};           // RGB
-static const SDL_Color HINT_COLOR =    {220, 0, 0};               // RGB
-static const int SELECTED_COLOR[4] =   {0, 220, 0, 0};
-static const int UNSELECTED_COLOR[4] = {0, 55, 0, 0};
-static const int CUT_COLOR[4] =        {0, 0, 220, 0};
-static const int EDGE_COLOR[4] =       {220, 220, 220, 0};
-static const int BACKGROUND_COLOR[4] = {15, 15, 15, 255};
+static const SDL_Color EDIT_COLOR =       {220, 220, 220};
+static const SDL_Color HINT_COLOR =       {220, 0, 0};
+static const SDL_Color SELECTED_COLOR =   {0, 220, 0};
+static const SDL_Color UNSELECTED_COLOR = {0, 55, 0};
+static const SDL_Color CUT_COLOR =        {0, 0, 220};
+static const SDL_Color EDGE_COLOR =       {220, 220, 220};
+static const SDL_Color BACKGROUND_COLOR = {15, 15, 15};
 static int TEXTBOX_WIDTH_SCALE = 25;                        // width of char
 static int TEXTBOX_HEIGHT = 50;                             // height of char
 static double UI_SCALE = 1.0;
@@ -284,8 +284,8 @@ void calculatePositions(Node* root, Node* selected);
 void recursivelyPrintPositions(Node* node, int level);
 // RENDERING
 void renderMessage(char* message, Point pos, double scale, SDL_Color color, bool wrap, bool cursor);
-void drawBox(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int offset, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
-void drawBorder(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int thickness, const int* color);
+void drawBox(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int offset, const SDL_Color color);
+void drawBorder(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int thickness, const SDL_Color color);
 void drawNode(Node* node);
 char** getLines(char* message, int wrap);
 char* getEndOfLine(char* line_start, int wrap);
@@ -1002,15 +1002,16 @@ void renderMessage(char* message, Point pos, double scale, SDL_Color color, bool
         message_rect.w = strlen(lines[cur_line]) * TEXTBOX_WIDTH_SCALE * scale;
         message_rect.h = TEXTBOX_HEIGHT * scale;
 
-        SDL_SetRenderDrawColor(APP.renderer, BACKGROUND_COLOR[0], BACKGROUND_COLOR[1], BACKGROUND_COLOR[2], BACKGROUND_COLOR[3]);
+        SDL_SetRenderDrawColor(APP.renderer, BACKGROUND_COLOR.r, BACKGROUND_COLOR.g, BACKGROUND_COLOR.b, 255);
         SDL_RenderFillRect(APP.renderer, &message_rect);
         logPrint("Rendering %s %d %d\n", message, message_rect.w, message_rect.h);
         SDL_RenderCopy(APP.renderer, texture_message, NULL, &message_rect);
 
+        // draw cursor
         if (cursor && len_so_far <= CURSOR_POSITION + 1 && CURSOR_POSITION < len_so_far + strlen(lines[cur_line]) ){
 
             int cursor_offset = (CURSOR_POSITION + 1 - len_so_far) * TEXTBOX_WIDTH_SCALE * GRAPH_SCALE;
-            SDL_SetRenderDrawColor(APP.renderer, 255, 255, 255, 255);
+            SDL_SetRenderDrawColor(APP.renderer, EDIT_COLOR.r, EDIT_COLOR.g, EDIT_COLOR.b, 255);
             SDL_RenderDrawLine(APP.renderer, message_rect.x + cursor_offset, message_rect.y, message_rect.x + cursor_offset, message_rect.y + (TEXTBOX_HEIGHT * GRAPH_SCALE));
         }
 
@@ -1025,19 +1026,19 @@ void renderMessage(char* message, Point pos, double scale, SDL_Color color, bool
     free(lines);
 }
 
-void drawBox(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int offset, Uint8 r, Uint8 g, Uint8 b, Uint8 a){
+void drawBox(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int offset, const SDL_Color color){
     SDL_Rect rect;
     rect.x = (int) n_cx - ( len  / 2 )  - offset;
     rect.y = (int) n_cy - ( height / 2 ) - offset;
     rect.w = len + offset + offset;
     rect.h = height + offset + offset;
-    SDL_SetRenderDrawColor(surface, r, g, b, a);
+    SDL_SetRenderDrawColor(surface, color.r, color.g, color.b, 255);
     SDL_RenderDrawRect(surface, &rect);
 }
 
-void drawBorder(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int thickness, const int* color){
+void drawBorder(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int thickness, const SDL_Color color){
     for (int i = 0; i < thickness; ++i)
-        drawBox(surface, n_cx , n_cy, len, height, i, color[0], color[1], color[2], color[3]);
+        drawBox(surface, n_cx , n_cy, len, height, i, color);
 }
 
 bool is_visible(Node* node){
@@ -1071,7 +1072,7 @@ void drawNode(Node* node) {
 
     /* draw edges between parent and child nodes */
     if (node != GRAPH.root && (is_visible(node->p) || is_visible(node)) ){
-        SDL_SetRenderDrawColor(APP.renderer, EDGE_COLOR[0], EDGE_COLOR[1], EDGE_COLOR[2], EDGE_COLOR[3]);
+        SDL_SetRenderDrawColor(APP.renderer, EDGE_COLOR.r, EDGE_COLOR.g, EDGE_COLOR.b, 255);
         SDL_RenderDrawLine(APP.renderer, x, y - (height*GRAPH_SCALE/2), node->p->pos.x, node->p->pos.y + (getHeight(node->p->text.buf, 1) * GRAPH_SCALE / 2));
     }
 
@@ -1122,7 +1123,7 @@ void drawNode(Node* node) {
 /* re-computes graph and draws everything onto renderer */
 void prepareScene() {
     logPrint("start prepareScene()\n");
-    SDL_SetRenderDrawColor(APP.renderer, BACKGROUND_COLOR[0], BACKGROUND_COLOR[1], BACKGROUND_COLOR[2], BACKGROUND_COLOR[3]); /* Background color */
+    SDL_SetRenderDrawColor(APP.renderer, BACKGROUND_COLOR.r, BACKGROUND_COLOR.g, BACKGROUND_COLOR.b, 255); /* Background color */
     SDL_RenderClear(APP.renderer);
 
     logPrint("Rendered\n");
