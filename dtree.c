@@ -38,7 +38,7 @@ static const int RADIUS = 50;
 static const int THICKNESS = 5;
 static int FONT_SIZE = 40;
 static const char* FONT_NAME = "./assets/SourceCodePro-Regular.otf";   // Default Font name
-static const char* HINT_CHARS = "adfghkl;\0";              // characters to use for hints
+static const char* HINT_CHARS = "adfghjkl;\0";              // characters to use for hints
 
 
 // ENUMS AND DATA STRUCTURES
@@ -599,7 +599,7 @@ void populateHintText(Node* node){
     while ( !done ){
         for (int i = 0; i < strlen(HINT_CHARS); ++i) {
             // blacklist hard-coded hints
-            if (HINT_CHARS[i] == 'k' || HINT_CHARS[i] == 'h' || HINT_CHARS[i] == 'l')
+            if (HINT_CHARS[i] == 'k' || HINT_CHARS[i] == 'h' || HINT_CHARS[i] == 'l' || HINT_CHARS[i] == 'j')
                 continue;
 
             for (int i = 0; i < HINT_BUFFER.size+1; ++i) HINT_TEXT_QUEUE[back][i] = '\0';
@@ -779,17 +779,20 @@ void moveCursorLine(int relative_line){
 }
 
 void doKeyDown(SDL_KeyboardEvent *event) {
-    switch(event->keysym.sym) {
-        case SDLK_BACKSPACE: if ( isEditMode(MODE) ) deleteCharInBufferRelativeToCursor(0); return;
-        case SDLK_DELETE:   if ( isEditMode(MODE) ) deleteCharInBufferRelativeToCursor(1); return;
-        case SDLK_MINUS:     GRAPH_SCALE *= (9./10.); return;
-        case SDLK_EQUALS:    GRAPH_SCALE *= (10./9.); return;
-        case SDLK_LEFT:      CURSOR_POSITION = max(CURSOR_POSITION-1,-1); return;
-        case SDLK_RIGHT:     CURSOR_POSITION = min(CURSOR_POSITION+1,CURRENT_BUFFER->len-1); return;
-        case SDLK_UP:   moveCursorLine(-1); return;
-        case SDLK_DOWN: moveCursorLine(1);  return;
-
-    }
+        if ( isEditMode(MODE) ){
+            switch(event->keysym.sym) {
+                case SDLK_BACKSPACE: deleteCharInBufferRelativeToCursor(0); return;
+                case SDLK_DELETE:    deleteCharInBufferRelativeToCursor(1); return;
+                case SDLK_LEFT:      CURSOR_POSITION = max(CURSOR_POSITION-1,-1); return;
+                case SDLK_RIGHT:     CURSOR_POSITION = min(CURSOR_POSITION+1,CURRENT_BUFFER->len-1); return;
+                case SDLK_UP:        moveCursorLine(-1); return;
+                case SDLK_DOWN:      moveCursorLine(1);  return;
+            }
+        }
+        switch(event->keysym.sym) {
+            case SDLK_MINUS:     GRAPH_SCALE *= (9./10.); return;
+            case SDLK_EQUALS:    GRAPH_SCALE *= (10./9.); return;
+        }
 }
 
 void doKeyUp(SDL_KeyboardEvent *event) {
