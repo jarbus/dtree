@@ -742,7 +742,7 @@ void handleTextInput(SDL_Event *event){
 }
 
 void moveCursorLine(int relative_line){
-    char** lines = getLines(GRAPH.selected->text.buf, 1);
+    char** lines = getLines(GRAPH.selected->text.buf, true);
 
     int len_so_far = 0;
     for (int i = 0; lines[i]; i++) {
@@ -1081,7 +1081,7 @@ void drawNode(Node* node) {
 
         /* render node text */
         renderMessage(node->text.buf, message_pos, GRAPH_SCALE, EDIT_COLOR, 1, &node->text == CURRENT_BUFFER);
-        char** lines = getLines(node->text.buf, 1);
+        char** lines = getLines(node->text.buf, true);
         int cur_line = 0;
         char* line = lines[cur_line];
         while ( line ){
