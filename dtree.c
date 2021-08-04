@@ -288,6 +288,7 @@ void drawBox(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int
 void drawBorder(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int thickness, const SDL_Color color);
 void drawNode(Node* node);
 char** getLines(char* message, int wrap);
+void freeLines(char** lines);
 char* getEndOfLine(char* line_start, int wrap);
 void prepareScene();
 void presentScene();
@@ -412,6 +413,12 @@ char** getLines(char* message, int wrap){
     logPrint("returning after making %d lines\n", cur_line);
     lines[cur_line] = NULL;
     return lines;
+}
+
+void freeLines(char** lines){
+    for (int i = 0; lines[i]; i++)
+        free(lines[i]);
+    free(lines);
 }
 
 // READ/WRITE
@@ -741,39 +748,37 @@ void handleTextInput(SDL_Event *event){
     }
 }
 
+// can only handle +1 and -1
 void moveCursorLine(int relative_line){
     char** lines = getLines(GRAPH.selected->text.buf, true);
-
     int len_so_far = 0;
+
     for (int i = 0; lines[i]; i++) {
+            if ( CURSOR_POSITION < len_so_far - 1 || CURSOR_POSITION > len_so_far + (int) strlen(lines[i]) - 1 ) {
+                len_so_far += (int) strlen(lines[i]) + 1;
+                continue;
+            }
+            if ( relative_line == 1 && !lines[i+1] ) CURSOR_POSITION = CURRENT_BUFFER->len - 1;
+            if ( relative_line == -1 && i == 0 ) CURSOR_POSITION = -1;
+
             int col = CURSOR_POSITION - len_so_far;
             // Move Up
-            if ( relative_line == -1 && i > 0 && CURSOR_POSITION >= len_so_far && CURSOR_POSITION < len_so_far + strlen(lines[i])){
-                if ( col > strlen(lines[i-1]) ) {
+            if ( relative_line == -1 && i > 0 ){
+                if ( col > (int) strlen(lines[i-1]) )
                     CURSOR_POSITION -= col + 1 + 1;
-                }
-                else {
-                    CURSOR_POSITION -= col + 1;                  // move to end of line - 1
-                    CURSOR_POSITION -= strlen(lines[i-1]) - col; //move to col'th idx of line i-1
-                }
+                else
+                    CURSOR_POSITION -= strlen(lines[i-1]) + 1;
             }
             // Move Down
-            else if ( relative_line == 1 && lines[i+1] && CURSOR_POSITION > len_so_far && CURSOR_POSITION < len_so_far + strlen(lines[i])){
-                if ( col > strlen(lines[i+1]) ) {
+            else if ( relative_line == 1 && lines[i+1] ){
+                if ( col > (int) strlen(lines[i+1]) - 1 )
                     CURSOR_POSITION += strlen(lines[i]) - col + strlen(lines[i+1]);
-                }
-                else {
-                    CURSOR_POSITION += strlen(lines[i]) + 1 - col;                  // move to end of line - 1
-                    CURSOR_POSITION += col; //move to col'th idx of line i-1
-                }
-                break;
+                else
+                    CURSOR_POSITION += strlen(lines[i]) + 1;
             }
-        len_so_far += strlen(lines[i]) + 1;
+            break;
     }
-    for (int i = 0; lines[i]; i++)
-        free(lines[i]);
-    free(lines);
-
+    freeLines(lines);
 }
 
 void doKeyDown(SDL_KeyboardEvent *event) {
@@ -1005,9 +1010,8 @@ void renderMessage(char* message, Point pos, double scale, SDL_Color color, bool
         logPrint("Rendering %s %d %d\n", message, message_rect.w, message_rect.h);
         SDL_RenderCopy(APP.renderer, texture_message, NULL, &message_rect);
 
-        // draw cursor
-        if (cursor && len_so_far <= CURSOR_POSITION + 1 && CURSOR_POSITION < len_so_far + strlen(lines[cur_line]) ){
-
+        // draw cursor (the int cast is required)
+        if (cursor && len_so_far <= CURSOR_POSITION + 1 && CURSOR_POSITION < len_so_far + (int) strlen(lines[cur_line]) ){
             int cursor_offset = (CURSOR_POSITION + 1 - len_so_far) * TEXTBOX_WIDTH_SCALE * GRAPH_SCALE;
             SDL_SetRenderDrawColor(APP.renderer, EDIT_COLOR.r, EDIT_COLOR.g, EDIT_COLOR.b, 255);
             SDL_RenderDrawLine(APP.renderer, message_rect.x + cursor_offset, message_rect.y, message_rect.x + cursor_offset, message_rect.y + (TEXTBOX_HEIGHT * GRAPH_SCALE));
@@ -1017,11 +1021,10 @@ void renderMessage(char* message, Point pos, double scale, SDL_Color color, bool
         SDL_FreeSurface(surface_message);
         SDL_DestroyTexture(texture_message);
         len_so_far += strlen(lines[cur_line]) + 1;
-        free(lines[cur_line]);
         cur_line++;
 
     }
-    free(lines);
+    freeLines(lines);
 }
 
 void drawBox(SDL_Renderer *surface, int n_cx, int n_cy, int len, int height, int offset, const SDL_Color color){
