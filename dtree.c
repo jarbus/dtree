@@ -245,6 +245,7 @@ static Node* LEFT_NEIGHBOR = NULL; // left and right neighbors of the selected n
 static Node* RIGHT_NEIGHBOR = NULL;
 static int OFFSCREEN_PADDING = 500;
 static int CURSOR_POSITION = 0;
+static int unwritten = 0;
 
 // GENERAL UTIL FUNCTIONS
 void removeNodeFromGraph(Node* node);
@@ -507,6 +508,7 @@ void writeFile(){
     FILE* output = fopen(FILENAME_BUFFER.buf, "w");
     writeChildrenStrings(output, GRAPH.root, 0);
     fclose(output);
+    unwritten = 0;
 }
 
 
@@ -694,6 +696,7 @@ void insertCharIntoCurrentBuffer(char c){
 
 }
 void deleteCharInBufferRelativeToCursor(int relative_position){
+    unwritten = 1;
     // relative position allows us to use the same code for both backspace and delete
     for (int i = CURSOR_POSITION + relative_position; i < CURRENT_BUFFER->len-1; i++) {
         CURRENT_BUFFER->buf[i] = CURRENT_BUFFER->buf[i+1];
@@ -717,6 +720,8 @@ void handleTextInput(SDL_Event *event){
                 }
             }
         }
+        else
+            unwritten = 1;
 
         // Add text to buffer
         if ( add_text ) insertCharIntoCurrentBuffer(event->edit.text[0]);
@@ -784,8 +789,8 @@ void moveCursorLine(int relative_line){
 void doKeyDown(SDL_KeyboardEvent *event) {
         if ( isEditMode(MODE) ){
             switch(event->keysym.sym) {
-                case SDLK_BACKSPACE: deleteCharInBufferRelativeToCursor(0); return;
-                case SDLK_DELETE:    deleteCharInBufferRelativeToCursor(1); return;
+                case SDLK_BACKSPACE: deleteCharInBufferRelativeToCursor(0); unwritten = 1; return;
+                case SDLK_DELETE:    deleteCharInBufferRelativeToCursor(1); unwritten = 1; return;
                 case SDLK_LEFT:      CURSOR_POSITION = max(CURSOR_POSITION-1,-1); return;
                 case SDLK_RIGHT:     CURSOR_POSITION = min(CURSOR_POSITION+1,CURRENT_BUFFER->len-1); return;
                 case SDLK_UP:        moveCursorLine(-1); return;
@@ -1140,7 +1145,14 @@ void prepareScene() {
     Point filename_pos;
     filename_pos.x = (int) ((0.0) * APP.window_size.x);
     filename_pos.y = (int) ((1.0) * APP.window_size.y - (TEXTBOX_HEIGHT * UI_SCALE));
-    renderMessage(FILENAME_BUFFER.buf, filename_pos, UI_SCALE, EDIT_COLOR, 0, &FILENAME_BUFFER == CURRENT_BUFFER);
+
+    char FILENAME_MESSAGE[2048];
+    strcpy(FILENAME_MESSAGE, FILENAME_BUFFER.buf);
+    if ( unwritten ){
+        strcpy( FILENAME_MESSAGE + FILENAME_BUFFER.len, "*");
+    }
+    renderMessage(FILENAME_MESSAGE, filename_pos, UI_SCALE, EDIT_COLOR, 0, &FILENAME_BUFFER == CURRENT_BUFFER);
+
 
     // Draw mode
     Point mode_text_pos;
