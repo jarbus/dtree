@@ -324,8 +324,7 @@ int getWidth (char* message, bool wrap){
     int max_width = 0;
     while ( tok ) {
         char* line_end = getEndOfLine(tok, wrap);
-        logPrint("back in loop\n");
-        if ( !line_end ){logPrint("breaking\n"); break;}
+        if ( !line_end ){break;}
         int line_len = ( line_end - tok );
         max_width = max(line_len, max_width);
         // copy all chars up until line_end
@@ -797,9 +796,11 @@ void doKeyDown(SDL_KeyboardEvent *event) {
                 case SDLK_DOWN:      moveCursorLine(1);  return;
             }
         }
-        switch(event->keysym.sym) {
-            case SDLK_MINUS:     GRAPH_SCALE *= 1/ZOOM_SPEED; return;
-            case SDLK_EQUALS:    GRAPH_SCALE *= ZOOM_SPEED; return;
+        else{
+            switch(event->keysym.sym) {
+                case SDLK_MINUS:     GRAPH_SCALE *= 1/ZOOM_SPEED; return;
+                case SDLK_EQUALS:    GRAPH_SCALE *= ZOOM_SPEED; return;
+            }
         }
 }
 
