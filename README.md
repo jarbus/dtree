@@ -21,6 +21,8 @@ In Travel Mode:
 * `r` : edit file name
 * `w` : save file
 * `q` : quit the program
+* `-` : Zoom out
+* `=` : Zoom in
 
 In Any Mode:
     - press `esc` to return to travel mode and switch mode-persist off
