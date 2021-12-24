@@ -4,6 +4,7 @@
 #include "SDL_events.h"
 #include "SDL_scancode.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
 // https://stackoverflow.com/questions/1644868/define-macro-for-log-printing-in-c
@@ -16,6 +17,7 @@
 
 #define SCREEN_WIDTH   1280
 #define SCREEN_HEIGHT  720
+
 
 /* User Customizable Variables*/
 static const SDL_Color EDIT_COLOR =       {220, 220, 220};
@@ -754,6 +756,13 @@ void handleTextInput(SDL_Event *event){
     }
 }
 
+// Opens the file/url specified at the node
+void open_node_text(Node* node){
+    char buf[1024];
+    sprintf(buf, "xdg-open %s\n", node->text.buf);
+    system(buf);
+}
+
 // can only handle +1 and -1
 void moveCursorLine(int relative_line){
     char** lines = getLines(GRAPH.selected->text.buf, true);
@@ -802,6 +811,7 @@ void doKeyDown(SDL_KeyboardEvent *event) {
             switch(event->keysym.sym) {
                 case SDLK_MINUS:     GRAPH_SCALE *= 1/ZOOM_SPEED; return;
                 case SDLK_EQUALS:    GRAPH_SCALE *= ZOOM_SPEED; return;
+                case SDLK_q: APP.quit = true; return;
             }
         }
 }
@@ -831,7 +841,7 @@ void doKeyUp(SDL_KeyboardEvent *event) {
                 case SDLK_s: clearBuffer(&GRAPH.selected->text); switchMode(Edit); return;
                 case SDLK_c: TOGGLE_MODE = true; return;
                 case SDLK_w: writeFile(); return;
-                case SDLK_q: APP.quit = true; return;
+                case SDLK_t: open_node_text(GRAPH.selected);
             }
             break; // end of Travel bindings
         case Edit:

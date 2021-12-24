@@ -19,6 +19,7 @@ In Travel Mode:
 * `p` : activate Paste mode for one node
 * `c` : persist the next mode
 * `r` : edit file name
+* `t` : open file/url specified by node buffer with xdg-open
 * `w` : save file
 * `q` : quit the program
 * `-` : Zoom out
