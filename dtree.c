@@ -1,6 +1,7 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_ttf.h>
+#include <SDL2/SDL_clipboard.h>
 #include "SDL_events.h"
 #include "SDL_scancode.h"
 #include <stdio.h>
@@ -17,6 +18,8 @@
 
 #define SCREEN_WIDTH   1280
 #define SCREEN_HEIGHT  720
+
+
 
 
 /* User Customizable Variables*/
@@ -698,6 +701,11 @@ void insertCharIntoCurrentBuffer(char c){
     CURRENT_BUFFER->len += 1;
 
 }
+void insertLineIntoCurrentBuffer(char* c){
+    for (int i = 0; i < strlen(c); ++i){
+        insertCharIntoCurrentBuffer(c[i]);
+    }
+}
 void deleteCharInBufferRelativeToCursor(int relative_position){
     unwritten = 1;
     // relative position allows us to use the same code for both backspace and delete
@@ -712,6 +720,7 @@ void deleteCharInBufferRelativeToCursor(int relative_position){
 void handleTextInput(SDL_Event *event){
     if ( CURRENT_BUFFER && CURRENT_BUFFER->len < CURRENT_BUFFER->size ){
         logPrint("Adding text to current buffer...\n");
+
         int add_text = 1;
         // skip adding to buffer for hint modes if not a valid hint char
         if ( isHintMode(MODE) ){
@@ -796,6 +805,7 @@ void moveCursorLine(int relative_line){
     freeLines(lines);
 }
 
+/* TODO copy paste*/
 void doKeyDown(SDL_KeyboardEvent *event) {
         if ( isEditMode(MODE) ){
             switch(event->keysym.sym) {
@@ -826,7 +836,23 @@ void doKeyUp(SDL_KeyboardEvent *event) {
             if (MODE == Travel) CUT = NULL; // clear cut node on a double escape
             switchMode(Travel);
             return;
+
+        case SDLK_c:
+            if (event->keysym.mod == KMOD_LCTRL || event->keysym.mod == KMOD_RCTRL ){
+                SDL_SetClipboardText(GRAPH.selected->text.buf);
+            } return;
+
+        case SDLK_v:
+            if (event->keysym.mod == KMOD_LCTRL || event->keysym.mod == KMOD_RCTRL ){
+                char* clip = SDL_GetClipboardText();
+                switchMode(Edit);
+                insertLineIntoCurrentBuffer(clip);
+                SDL_free(clip);
+            } return;
     }
+
+    /* SDL_SetClipboardText(char*) */
+    /* char* test = SDL_GetClipboardText() */
 
     // mode-specific key-bindings
     switch(MODE) {
@@ -839,7 +865,7 @@ void doKeyUp(SDL_KeyboardEvent *event) {
                 case SDLK_m: switchMode(Cut); return;
                 case SDLK_p: switchMode(Paste); return;
                 case SDLK_s: clearBuffer(&GRAPH.selected->text); switchMode(Edit); return;
-                case SDLK_c: TOGGLE_MODE = true; return;
+                //case SDLK_c: TOGGLE_MODE = true; return;
                 case SDLK_w: writeFile(); return;
                 case SDLK_t: open_node_text(GRAPH.selected);
             }
@@ -1241,6 +1267,7 @@ int main(int argc, char *argv[]) {
     memset(&APP, 0, sizeof(App));
     /* set up window, screen, and renderer */
     initSDL();
+
 
     makeGraph(&GRAPH);
 
