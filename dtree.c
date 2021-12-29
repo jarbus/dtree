@@ -346,7 +346,7 @@ int getHeight (char* message, bool wrap){
     if ( wrap ){
         int num_lines=1, chars_since_line_start=0, chars_since_last_space=0;
         for (int i = 0; i < strlen(message); ++i) {
-            if ( chars_since_line_start >= NUM_CHARS_B4_WRAP && message[i] != ' ' && message[i] != '\n' && i != strlen(message) - 1 ) {
+            if ( chars_since_line_start >= NUM_CHARS_B4_WRAP && message[i] != ' ' && message[i] != '\n' && i != strlen(message) - 1 && chars_since_last_space != chars_since_line_start + 1 ) {
                 chars_since_line_start = chars_since_last_space -1;
                 num_lines++;
             }
