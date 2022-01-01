@@ -780,19 +780,19 @@ void moveCursorLine(int relative_line){
 void doKeyDown(SDL_KeyboardEvent *event) {
         if ( isEditMode(MODE) ){
             switch(event->keysym.sym) {
-                case SDLK_BACKSPACE: deleteCharInBufferRelativeToCursor(0); unwritten = 1; return;
-                case SDLK_DELETE:    deleteCharInBufferRelativeToCursor(1); unwritten = 1; return;
-                case SDLK_LEFT:      CURSOR_POSITION = max(CURSOR_POSITION-1,-1); return;
-                case SDLK_RIGHT:     CURSOR_POSITION = min(CURSOR_POSITION+1,CURRENT_BUFFER->len-1); return;
-                case SDLK_UP:        moveCursorLine(-1); return;
-                case SDLK_DOWN:      moveCursorLine(1);  return;
+                case KEY_BACKSPACE: deleteCharInBufferRelativeToCursor(0); unwritten = 1; return;
+                case KEY_DELETE:    deleteCharInBufferRelativeToCursor(1); unwritten = 1; return;
+                case KEY_LEFT:      CURSOR_POSITION = max(CURSOR_POSITION-1,-1); return;
+                case KEY_RIGHT:     CURSOR_POSITION = min(CURSOR_POSITION+1,CURRENT_BUFFER->len-1); return;
+                case KEY_UP:        moveCursorLine(-1); return;
+                case KEY_DOWN:      moveCursorLine(1);  return;
             }
         }
         else{
             switch(event->keysym.sym) {
-                case SDLK_MINUS:     GRAPH_SCALE *= 1/ZOOM_SPEED; return;
-                case SDLK_EQUALS:    GRAPH_SCALE *= ZOOM_SPEED; return;
-                case SDLK_q: APP.quit = true; return;
+                case KEY_ZOOM_OUT:     GRAPH_SCALE *= 1/ZOOM_SPEED; return;
+                case KEY_ZOOM_IN:    GRAPH_SCALE *= ZOOM_SPEED; return;
+                case KEY_QUIT: APP.quit = true; return;
             }
         }
 }
@@ -800,17 +800,17 @@ void doKeyDown(SDL_KeyboardEvent *event) {
 void doKeyUp(SDL_KeyboardEvent *event) {
     // up-front key-checks that apply to any mode
     switch(event->keysym.sym) {
-        case SDLK_ESCAPE:
+        case KEY_ESCAPE:
             if (MODE == Travel) CUT = NULL; // clear cut node on a double escape
             switchMode(Travel);
             return;
 
-        case SDLK_c:
+        case SDLK_c: //hardcode CTRL+C for copy
             if (event->keysym.mod == KMOD_LCTRL || event->keysym.mod == KMOD_RCTRL ){
                 SDL_SetClipboardText(GRAPH.selected->text.buf);
             } return;
 
-        case SDLK_v:
+        case SDLK_v: // Hardcode CTRL+V for paste
             if (event->keysym.mod == KMOD_LCTRL || event->keysym.mod == KMOD_RCTRL ){
                 char* clip = SDL_GetClipboardText();
                 switchMode(Edit);
@@ -823,28 +823,28 @@ void doKeyUp(SDL_KeyboardEvent *event) {
     switch(MODE) {
         case Travel:
             switch(event->keysym.sym) {
-                case SDLK_o: switchMode(MakeChild); return;
-                case SDLK_e: switchMode(Edit); return;
-                case SDLK_r: switchMode(FilenameEdit); return;
-                case SDLK_x: switchMode(Delete); return;
-                case SDLK_m: switchMode(Cut); return;
-                case SDLK_p: switchMode(Paste); return;
-                case SDLK_s: clearBuffer(&GRAPH.selected->text); switchMode(Edit); return;
-                case SDLK_b: TOGGLE_MODE = true; return;
-                case SDLK_w: writeFile(); return;
-                case SDLK_t: open_node_text(GRAPH.selected);
+                case KEY_MAKE_CHILD: switchMode(MakeChild); return;
+                case KEY_EDIT: switchMode(Edit); return;
+                case KEY_RENAME_FILE: switchMode(FilenameEdit); return;
+                case KEY_DELETE_NODE: switchMode(Delete); return;
+                case KEY_CUT_NODE: switchMode(Cut); return;
+                case KEY_PASTE_NODE: switchMode(Paste); return;
+                case KEY_CLEAR_NODE_TEXT: clearBuffer(&GRAPH.selected->text); switchMode(Edit); return;
+                case KEY_TOGGLE_MODE: TOGGLE_MODE = true; return;
+                case KEY_WRITE_FILE: writeFile(); return;
+                case KEY_OPEN_NODE_TEXT: open_node_text(GRAPH.selected);
             }
             break; // end of Travel bindings
         case Edit:
             switch(event->keysym.sym) {
-                case SDLK_RETURN:
+                case SDLK_RETURN: //intentionally hardcoded
                     insertCharIntoCurrentBuffer('\n');
                     return;
             }
             break; // end of Edit bindings
         case Delete:
             switch(event->keysym.sym) {
-                case SDLK_x: { switchMode(Travel); return; }
+                case KEY_DELETE_NODE: { switchMode(Travel); return; }
             }
             break; // end of Delete bindings
         default:

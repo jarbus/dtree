@@ -3,6 +3,29 @@
 #define SCREEN_WIDTH   1280
 #define SCREEN_HEIGHT  720
 
+enum Key {
+    KEY_MAKE_CHILD       = 'o',
+    KEY_EDIT             = 'e',
+    KEY_RENAME_FILE      = 'r',
+    KEY_DELETE_NODE      = 'x',
+    KEY_CUT_NODE         = 'm',
+    KEY_PASTE_NODE       = 'p',
+    KEY_CLEAR_NODE_TEXT  = 's',
+    KEY_TOGGLE_MODE      = 'b',
+    KEY_WRITE_FILE       = 'w',
+    KEY_OPEN_NODE_TEXT   = 't',
+    KEY_QUIT             = 'q',
+    KEY_ZOOM_IN          = '=',
+    KEY_ZOOM_OUT         = '-',
+    KEY_BACKSPACE        = SDLK_BACKSPACE,
+    KEY_DELETE           = SDLK_DELETE,
+    KEY_LEFT             = SDLK_LEFT,
+    KEY_RIGHT            = SDLK_RIGHT,
+    KEY_UP               = SDLK_UP,
+    KEY_DOWN             = SDLK_DOWN,
+    KEY_ESCAPE           = SDLK_ESCAPE,
+};
+
 /* User Customizable Variables*/
 static const SDL_Color EDIT_COLOR =       {220, 220, 220};
 static const SDL_Color HINT_COLOR =       {220, 0, 0};
